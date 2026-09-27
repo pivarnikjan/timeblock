@@ -1,0 +1,18 @@
+year_goal,year,month_outcome,month,week_priority,week,task,duration,priority,energy,due_date,status,window,notes
+CIS-ITSM Certification,2026,,,,,,,,,,,Learning,"EXAMPLE PLAN - edit or replace every row. A window set on a goal is inherited by everything below it."
+CIS-ITSM Certification,2026,ServiceNow ITSM Fundamentals,2026-10,,,,,,,,,,
+CIS-ITSM Certification,2026,ServiceNow ITSM Implementation,2026-10,,,,,,,,,,
+CIS-ITSM Certification,2026,CIS-ITSM Exam,2026-11,,,,,,,,,,Mark this outcome done when you pass.
+CIS-ITSM Certification,2026,ServiceNow ITSM Fundamentals,2026-10,Service Portfolio Management,2026-10 week 1,,,,,,,,"October week 1 = 28 Sep - 4 Oct (a week belongs to the month holding its Thursday)."
+CIS-ITSM Certification,2026,ServiceNow ITSM Fundamentals,2026-10,IT Service Management,2026-10 week 2,,,,,,,,
+CIS-ITSM Certification,2026,ServiceNow ITSM Implementation,2026-10,Problem Management,2026-10 week 3,,,,,,,,
+CIS-ITSM Certification,2026,ServiceNow ITSM Implementation,2026-10,Incident Management,2026-10 week 4,,,,,,,,"October week 5 (26 Oct - 1 Nov) is left free as buffer before the exam."
+CIS-ITSM Certification,2026,ServiceNow ITSM Fundamentals,2026-10,Service Portfolio Management,2026-10 week 1,Ebook assistance,5 minutes,,shallow,,,,
+CIS-ITSM Certification,2026,ServiceNow ITSM Fundamentals,2026-10,Service Portfolio Management,2026-10 week 1,Accessibility information,5 minutes,,shallow,,,,
+CIS-ITSM Certification,2026,ServiceNow ITSM Fundamentals,2026-10,Service Portfolio Management,2026-10 week 1,Welcome to IT Service Management Fundamentals,20 minutes,,,,,,
+CIS-ITSM Certification,2026,ServiceNow ITSM Fundamentals,2026-10,Service Portfolio Management,2026-10 week 1,Introduction to ITSM Application,27 minutes,,,,,,
+CIS-ITSM Certification,2026,ServiceNow ITSM Fundamentals,2026-10,Service Portfolio Management,2026-10 week 1,Operate IT Services,56 minutes,,,,,,
+CIS-ITSM Certification,2026,ServiceNow ITSM Fundamentals,2026-10,Service Portfolio Management,2026-10 week 1,Maintain IT Services,1 hour 25 minutes,,,,,,
+CIS-ITSM Certification,2026,ServiceNow ITSM Fundamentals,2026-10,Service Portfolio Management,2026-10 week 1,Improve IT Services,56 minutes,,,,,,
+CIS-ITSM Certification,2026,ServiceNow ITSM Fundamentals,2026-10,Service Portfolio Management,2026-10 week 1,Summary and recap,10 minutes,,,,,,
+CIS-ITSM Certification,2026,CIS-ITSM Exam,2026-11,,,Book the CIS-ITSM exam,30 minutes,1,admin,30.10.2026,,,"The exam itself is a fixed appointment: put it in your calendar at the booked time and the planner works around it."

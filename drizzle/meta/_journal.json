@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1786552736653,
+      "tag": "0000_daily_slapstick",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790248809578,
+      "tag": "0001_connected_goals",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790248843717,
+      "tag": "0002_drop_legacy_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790452672455,
+      "tag": "0003_calendar_view",
+      "breakpoints": true
+    }
+  ]
+}

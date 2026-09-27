@@ -1,0 +1,224 @@
+import Link from 'next/link';
+import { DateTime } from 'luxon';
+import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
+import { layoutColumns, layoutLanes } from '@/lib/calendar/layout';
+import { chipStyle, HideToggle, PlanLink } from './event-chip';
+import { ScrollArea } from './scroll-area';
+
+/** 48px an hour, like Google Calendar's default density. */
+const PX_PER_MIN = 0.8;
+const LANE_PX = 22;
+
+const dayIndex = (data: CalendarData, dt: DateTime) =>
+  Math.round(dt.startOf('day').diff(DateTime.fromISO(data.range.days[0], { zone: data.zone }), 'days').days);
+
+/** Exclusive end day of an all-day/multi-day item, as an index into the visible days. */
+function endIndex(data: CalendarData, item: CalendarItem): number {
+  // All-day ends are exclusive midnights; a timed multi-day event covers the day its end falls in.
+  const lastDay = item.allDay || item.end.equals(item.end.startOf('day')) ? item.end.minus({ milliseconds: 1 }) : item.end;
+  return dayIndex(data, lastDay) + 1;
+}
+
+export function TimeGrid({ data }: { data: CalendarData }) {
+  const { days } = data.range;
+  const { startMin, endMin } = data.hours;
+  const columns = `3.5rem repeat(${days.length}, minmax(0, 1fr))`;
+  const height = (endMin - startMin) * PX_PER_MIN;
+
+  const spanning = data.items.filter((i) => i.allDay || i.multiDay);
+  const timed = data.items.filter((i) => !i.allDay && !i.multiDay);
+  const lanes = layoutLanes(
+    spanning.map((item) => ({ item, startDay: dayIndex(data, item.start), endDay: endIndex(data, item) })),
+    days.length,
+  );
+  const laneCount = lanes.reduce((max, l) => Math.max(max, l.lane + 1), 0);
+
+  // Open an hour before now when today is shown, else an hour before the first
+  // timed item — never scrolled to an empty early morning.
+  const firstMin = (dt: DateTime) => dt.diff(dt.startOf('day'), 'minutes').minutes;
+  const focus = days.includes(data.today)
+    ? firstMin(data.now)
+    : timed.reduce((min, i) => Math.min(min, firstMin(i.start)), Infinity);
+  const initialTop = Number.isFinite(focus) ? Math.max(0, (focus - 60 - startMin) * PX_PER_MIN) : 0;
+
+  const hours: number[] = [];
+  for (let m = Math.ceil(startMin / 60) * 60; m < endMin; m += 60) hours.push(m);
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+      {/* Day headers */}
+      <div className="grid border-b border-border" style={{ gridTemplateColumns: columns }}>
+        <div className="flex items-end justify-center pb-1 text-[10px] text-muted">{data.now.toFormat('ZZZZ')}</div>
+        {days.map((day) => {
+          const dt = DateTime.fromISO(day, { zone: data.zone });
+          const isToday = day === data.today;
+          return (
+            <Link
+              key={day}
+              href={`/calendar?view=day&date=${day}`}
+              className="flex flex-col items-center gap-0.5 py-2 hover:bg-background"
+            >
+              <span className={`text-[11px] font-medium uppercase ${isToday ? 'text-[#1a73e8]' : 'text-muted'}`}>
+                {dt.toFormat('ccc')}
+              </span>
+              <span
+                className={`flex h-9 w-9 items-center justify-center rounded-full text-xl ${
+                  isToday ? 'bg-[#1a73e8] text-white' : ''
+                }`}
+              >
+                {dt.toFormat('d')}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* All-day and multi-day events, as bars across the days they cover */}
+      <div className="grid border-b border-border" style={{ gridTemplateColumns: columns }}>
+        <div className="py-1 pr-1 text-right text-[10px] text-muted">all day</div>
+        <div className="relative" style={{ gridColumn: `2 / span ${days.length}`, height: Math.max(laneCount * LANE_PX, 8) + 4 }}>
+          {lanes.map(({ item, lane, col, span, continuesBefore, continuesAfter }) => {
+            const { style, className } = chipStyle(item);
+            return (
+              <div
+                key={item.id}
+                className={`group absolute flex items-center gap-1 overflow-hidden px-1.5 text-xs ${className} ${
+                  continuesBefore ? 'rounded-l-none' : 'rounded-l'
+                } ${continuesAfter ? 'rounded-r-none' : 'rounded-r'}`}
+                style={{
+                  ...style,
+                  top: lane * LANE_PX + 2,
+                  height: LANE_PX - 3,
+                  left: `calc(${(col / days.length) * 100}% + 2px)`,
+                  width: `calc(${(span / days.length) * 100}% - 4px)`,
+                }}
+                title={item.title}
+              >
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {continuesBefore && '◂ '}
+                  {item.title}
+                  {continuesAfter && ' ▸'}
+                </span>
+                <HideToggle item={item} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Time grid */}
+      <ScrollArea initialTop={initialTop} className="max-h-[75vh] overflow-y-auto">
+        <div className="grid" style={{ gridTemplateColumns: columns }}>
+          <div className="relative" style={{ height }}>
+            {hours.map((m) => (
+              <span
+                key={m}
+                className="absolute right-1.5 -translate-y-1/2 text-[10px] tabular-nums text-muted"
+                style={{ top: (m - startMin) * PX_PER_MIN }}
+              >
+                {m === startMin ? '' : `${String(Math.floor(m / 60)).padStart(2, '0')}:00`}
+              </span>
+            ))}
+          </div>
+
+          {days.map((day) => (
+            <DayColumn key={day} data={data} day={day} timed={timed} height={height} hours={hours} />
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+function DayColumn({
+  data,
+  day,
+  timed,
+  height,
+  hours,
+}: {
+  data: CalendarData;
+  day: string;
+  timed: CalendarItem[];
+  height: number;
+  hours: number[];
+}) {
+  const { startMin, endMin } = data.hours;
+  const dayStart = DateTime.fromISO(day, { zone: data.zone }).startOf('day');
+  const visibleStart = dayStart.plus({ minutes: startMin });
+  const visibleEnd = dayStart.plus({ minutes: endMin });
+  const toMin = (dt: DateTime) => dt.diff(dayStart, 'minutes').minutes - startMin;
+
+  // Timed items clipped to this day's visible hours; an event crossing midnight shows on both days.
+  const pieces = timed
+    .filter((item) => item.start < visibleEnd && item.end > visibleStart)
+    .map((item) => ({
+      item,
+      start: toMin(DateTime.max(item.start, visibleStart)),
+      end: Math.max(toMin(DateTime.min(item.end, visibleEnd)), toMin(DateTime.max(item.start, visibleStart)) + 15),
+    }));
+
+  const nowTop = day === data.today ? toMin(data.now) : null;
+
+  return (
+    <div className="relative border-l border-border" style={{ height }}>
+      {hours.map((m) => (
+        <div key={m} className="absolute inset-x-0 border-t border-border/70" style={{ top: (m - startMin) * PX_PER_MIN }} />
+      ))}
+
+      {/* Time windows (Learning, Work…) as faint bands */}
+      {(data.bands[day] ?? []).map((band) => {
+        const top = Math.max(0, toMin(band.start)) * PX_PER_MIN;
+        const bottom = Math.min(endMin - startMin, toMin(band.end)) * PX_PER_MIN;
+        if (bottom <= top) return null;
+        return (
+          <div
+            key={band.name}
+            className="absolute inset-x-0 border-y border-dashed border-accent/20 bg-accent/[0.04]"
+            style={{ top, height: bottom - top }}
+          >
+            <span className="absolute right-1 top-0.5 text-[9px] uppercase tracking-wide text-accent/60">{band.name}</span>
+          </div>
+        );
+      })}
+
+      {layoutColumns(pieces).map(({ item, start, end, col, cols }) => {
+        const { style, className } = chipStyle(item);
+        const heightPx = (end - start) * PX_PER_MIN;
+        const time = `${item.start.toFormat('HH:mm')} – ${item.end.toFormat('HH:mm')}`;
+        return (
+          <PlanLink
+            key={`${item.id}@${day}`}
+            item={item}
+            className={`group absolute overflow-hidden rounded px-1.5 py-0.5 text-xs leading-tight shadow-sm ${className}`}
+            style={{
+              ...style,
+              top: start * PX_PER_MIN + 1,
+              height: Math.max(heightPx - 2, 14),
+              left: `calc(${(col / cols) * 100}% + 1px)`,
+              width: `calc(${100 / cols}% - 3px)`,
+            }}
+          >
+            <div className="flex items-start gap-1">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium" title={`${item.title} · ${time}`}>
+                  {item.title}
+                </span>
+                {heightPx >= 30 && <span className="block truncate opacity-80">{time}{item.draft ? ' · draft' : ''}</span>}
+              </span>
+              <HideToggle item={item} />
+            </div>
+          </PlanLink>
+        );
+      })}
+
+      {nowTop !== null && nowTop >= 0 && nowTop <= endMin - startMin && (
+        <div className="pointer-events-none absolute inset-x-0 z-10" style={{ top: nowTop * PX_PER_MIN }}>
+          <div className="relative h-0.5 bg-[#ea4335]">
+            <span className="absolute -left-1.5 -top-1 h-2.5 w-2.5 rounded-full bg-[#ea4335]" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

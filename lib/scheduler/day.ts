@@ -1,0 +1,96 @@
+import { DateTime } from 'luxon';
+import type { Settings } from '@/lib/db/schema';
+import { clamp, isEmpty, merge, minutes, pad, subtract, type Interval } from './intervals';
+
+/** The subset of settings that defines the shape of a working day. */
+export type DayShape = Pick<
+  Settings,
+  | 'timezone'
+  | 'dayStart'
+  | 'dayEnd'
+  | 'bufferMin'
+  | 'maxFocusBlockMin'
+  | 'minBlockMin'
+  | 'lunchStart'
+  | 'lunchMin'
+>;
+
+/** A busy span as it arrives from Google: UTC ISO instants. */
+export interface BusySpan {
+  start: string;
+  end: string;
+}
+
+/** A named stretch of the day work may land in. `id: null` is the whole day. */
+export interface WindowSpec {
+  id: number | null;
+  name: string;
+  /** Local HH:mm. */
+  start: string;
+  end: string;
+  /** ISO weekdays, 1 = Monday … 7 = Sunday. */
+  weekdays: number[];
+}
+
+export function atLocalTime(date: string, hhmm: string, zone: string): DateTime {
+  const [hour, minute] = hhmm.split(':').map(Number);
+  const dt = DateTime.fromISO(date, { zone }).set({ hour, minute, second: 0, millisecond: 0 });
+  if (!dt.isValid) throw new Error(`Invalid local time ${date} ${hhmm} in ${zone}`);
+  return dt;
+}
+
+/** The whole visible day, e.g. 06:00–18:00 local on `date`. */
+export function dayWindow(date: string, shape: DayShape): Interval {
+  return {
+    start: atLocalTime(date, shape.dayStart, shape.timezone),
+    end: atLocalTime(date, shape.dayEnd, shape.timezone),
+  };
+}
+
+/** The window used by work that has no named window: the whole day, every day. */
+export function anytimeWindow(shape: DayShape): WindowSpec {
+  return { id: null, name: 'Anytime', start: shape.dayStart, end: shape.dayEnd, weekdays: [1, 2, 3, 4, 5, 6, 7] };
+}
+
+export function windowOpensOn(spec: WindowSpec, date: string, zone: string): boolean {
+  return spec.weekdays.includes(DateTime.fromISO(date, { zone }).weekday);
+}
+
+export function windowInterval(date: string, spec: WindowSpec, zone: string): Interval {
+  return { start: atLocalTime(date, spec.start, zone), end: atLocalTime(date, spec.end, zone) };
+}
+
+export function toIntervals(spans: BusySpan[], zone: string): Interval[] {
+  return spans
+    .map((span) => ({
+      start: DateTime.fromISO(span.start, { zone }),
+      end: DateTime.fromISO(span.end, { zone }),
+    }))
+    .filter((i) => i.start.isValid && i.end.isValid && !isEmpty(i));
+}
+
+/**
+ * Free time on `date` inside `within` (the whole day when omitted), in clock order.
+ *
+ * Busy spans are padded by `bufferMin` on both sides before subtraction, so no
+ * returned slot can ever sit inside the protected gap around a meeting. Lunch is
+ * subtracted unpadded — it is itself a break. Anything shorter than
+ * `minBlockMin` is dropped as unusable.
+ */
+export function freeSlots(
+  date: string,
+  shape: DayShape,
+  busy: BusySpan[],
+  within: Interval = dayWindow(date, shape),
+): Interval[] {
+  const padded = pad(toIntervals(busy, shape.timezone), shape.bufferMin);
+
+  const lunchStart = atLocalTime(date, shape.lunchStart, shape.timezone);
+  const lunch: Interval = { start: lunchStart, end: lunchStart.plus({ minutes: shape.lunchMin }) };
+
+  const blocked = merge([...padded, ...(shape.lunchMin > 0 ? [lunch] : [])])
+    .map((i) => clamp(i, within))
+    .filter((i): i is Interval => i !== null);
+
+  return subtract(within, blocked).filter((slot) => minutes(slot) >= shape.minBlockMin);
+}
