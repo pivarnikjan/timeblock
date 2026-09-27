@@ -5,6 +5,7 @@ import { clearCredentials } from '@/lib/google/credentials';
 import { num, optNum, optStr, str } from '@/lib/forms';
 import { updateSettings } from '@/lib/repo/settings';
 import { createWindow, deleteWindow, updateWindow } from '@/lib/repo/windows';
+import { parseHexColor } from '@/lib/calendar/colors';
 
 export async function updateDayShapeAction(form: FormData): Promise<void> {
   await updateSettings({
@@ -49,7 +50,14 @@ export async function createWindowAction(form: FormData): Promise<void> {
   const startTime = str(form, 'startTime');
   const endTime = str(form, 'endTime');
   assertOrder(startTime, endTime);
-  await createWindow({ name: str(form, 'name'), startTime, endTime, weekdays: weekdaysOf(form), sortOrder: optNum(form, 'sortOrder') ?? 99 });
+  await createWindow({
+    name: str(form, 'name'),
+    startTime,
+    endTime,
+    weekdays: weekdaysOf(form),
+    sortOrder: optNum(form, 'sortOrder') ?? 99,
+    color: parseHexColor(form.get('color')),
+  });
   revalidatePath('/', 'layout');
 }
 
@@ -57,7 +65,13 @@ export async function updateWindowAction(form: FormData): Promise<void> {
   const startTime = str(form, 'startTime');
   const endTime = str(form, 'endTime');
   assertOrder(startTime, endTime);
-  await updateWindow(num(form, 'id'), { name: str(form, 'name'), startTime, endTime, weekdays: weekdaysOf(form) });
+  await updateWindow(num(form, 'id'), {
+    name: str(form, 'name'),
+    startTime,
+    endTime,
+    weekdays: weekdaysOf(form),
+    color: parseHexColor(form.get('color')),
+  });
   revalidatePath('/', 'layout');
 }
 

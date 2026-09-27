@@ -14,6 +14,8 @@ export interface CalendarFilters {
   hiddenEvents: Record<string, string>;
   /** Views that show only multi-day events. */
   multiDayOnly: CalendarView[];
+  /** Draw time-window bands and their names over the blocks instead of behind them. */
+  windowsInFront: boolean;
 }
 
 export const DEFAULT_FILTERS: CalendarFilters = {
@@ -21,6 +23,7 @@ export const DEFAULT_FILTERS: CalendarFilters = {
   hidePlan: false,
   hiddenEvents: {},
   multiDayOnly: [],
+  windowsInFront: false,
 };
 
 /**
@@ -50,6 +53,7 @@ export function parseFilters(json: string | null | undefined): CalendarFilters {
     hidePlan: o.hidePlan === true || o.greyPlan === true,
     hiddenEvents: { ...titles(o.greyEvents), ...titles(o.hiddenEvents) },
     multiDayOnly: strings(o.multiDayOnly).filter((v): v is CalendarView => (VIEWS as readonly string[]).includes(v)),
+    windowsInFront: o.windowsInFront === true,
   };
 }
 

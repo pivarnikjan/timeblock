@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-09-27 | v0.5 | [E14 · Readable time windows](#e14--readable-time-windows) | TB-051 – TB-053 | Done |
 | 2026-09-27 | v0.4.1 | [E13 · Plan the whole calendar](#e13--plan-the-whole-calendar) | TB-050 (change) | Done |
 | 2026-09-27 | v0.4 | [E13 · Plan the whole calendar](#e13--plan-the-whole-calendar) | TB-047 – TB-049 | Done |
 | 2026-09-24 | v0.2 | [E6 · Connected goals and progress](#e6--connected-goals-and-progress) | TB-020 – TB-024 | Done |
@@ -32,6 +33,58 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-09-27 · v0.5 — Readable time windows
+
+**Theme.** Time windows tell themselves apart at a glance, and the Calendar
+shows the week without settings-type clutter around it.
+
+**Upgrade notes.** Migration `0005_window_colors` adds `time_windows.color`
+(existing windows get palette colours) and makes Week the default view — a
+Calendar still on the old default (Today) switches to Week; any other view you
+chose is kept. drizzle-kit rebuilds the `settings` table to change the column
+default; every value is copied across.
+
+## E14 · Readable time windows
+
+> See at a glance which window a block sits in, without the same label printed
+> on every day.
+
+### TB-051 · Coloured windows, named once, in front on demand
+*As a planner, I want each time window in its own colour and named once, with a
+switch to bring them to the front, so that the week is easy to read.*
+
+Acceptance criteria
+- [x] Each window is a band in its own colour with a left stripe; its name
+      appears only on the first visible day it opens.
+- [x] The left panel lists every window with its colour and hours.
+- [x] **Show in front** (off by default, remembered) draws bands and solid name
+      labels over the blocks; blocks stay clickable and draggable underneath.
+- [x] A window's colour is set in Settings → Time windows; without one it gets
+      a palette colour by position, never one of the block colours.
+
+Where to look: `lib/calendar/bands.ts`, `lib/calendar/colors.ts`
+(`windowColor`, + tests) · `components/calendar/time-grid.tsx` (`WindowBands`) ·
+`calendar-chrome.tsx` · `app/settings/page.tsx`.
+
+### TB-052 · Google calendar choice moves to Settings
+*As a planner, I want the list of Google calendars out of the Calendar's side
+panel, so that something I rarely change does not distract me.*
+
+Acceptance criteria
+- [x] Settings → Calendar has a checkbox per Google calendar (TimeBlock's own
+      calendar excluded); unticked calendars are hidden as before.
+- [x] The left panel shows "N of M shown · choose", linking there.
+
+### TB-053 · Week by default
+*As a planner, I want the Calendar to open in Week, and to choose that default
+myself, so that I see my week without switching views.*
+
+Acceptance criteria
+- [x] New installs open in Week; existing ones still on Today switch to Week.
+- [x] Settings → Calendar → **Default view** picks the view the Calendar opens in.
 
 ---
 

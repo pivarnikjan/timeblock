@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { restoreEventsAction, toggleCalendarAction, toggleMultiDayOnlyAction, togglePlanAction } from '@/app/actions/calendar';
+import { restoreEventsAction, toggleMultiDayOnlyAction, togglePlanAction, toggleWindowsFrontAction } from '@/app/actions/calendar';
 import { energyColor } from '@/lib/calendar/colors';
 import type { CalendarData } from '@/lib/calendar/load';
 import { VIEW_LABEL, VIEWS } from '@/lib/calendar/views';
@@ -65,10 +65,11 @@ function IconLink({ href: to, label, children }: { href: string; label: string; 
 }
 
 /**
- * The left-hand panel, like Google Calendar's "My calendars": a checkbox per
- * calendar (unticked = hidden from the view), TimeBlock's own plan, the
- * "only multi-day events" switch for the current view, and the events hidden
- * one by one — each a click away from coming back.
+ * The left-hand panel: TimeBlock's own plan, the time windows with their
+ * colours (and whether they sit behind or in front of the blocks), the "only
+ * multi-day events" switch for the current view, and the events hidden one by
+ * one — each a click away from coming back. Which Google calendars are shown
+ * rarely changes, so that choice lives in Settings → Calendar.
  */
 export function FilterPanel({ data }: { data: CalendarData }) {
   const multiOnly = data.filters.multiDayOnly.includes(data.view);
@@ -89,23 +90,54 @@ export function FilterPanel({ data }: { data: CalendarData }) {
               title="Blocks planned by TimeBlock"
             />
           </li>
-          {data.calendars.map((cal) => (
-            <li key={cal.id}>
-              <ToggleForm
-                action={toggleCalendarAction}
-                checked={!cal.hidden}
-                fields={{ calendarId: cal.id }}
-                color={cal.color}
-                label={<span className="truncate">{cal.summary}</span>}
-                title={cal.summary}
-              />
-            </li>
-          ))}
         </ul>
-        {data.calendars.length === 0 && data.connection.status !== 'connected' && (
-          <p className="mt-2 text-xs text-muted">
-            Your Google calendars appear here once <Link href="/settings" className="underline">connected</Link>.
+        <p className="mt-2 text-xs text-muted">
+          {data.connection.status === 'connected' ? (
+            <>
+              Google calendars: {data.calendars.filter((c) => !c.hidden).length} of {data.calendars.length} shown ·{' '}
+              <Link href="/settings#calendar" className="underline">
+                choose
+              </Link>
+            </>
+          ) : (
+            <>
+              Google calendars appear once <Link href="/settings" className="underline">connected</Link>.
+            </>
+          )}
+        </p>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Time windows</h2>
+        {data.windows.length === 0 ? (
+          <p className="text-xs text-muted">
+            None yet — add them in <Link href="/settings" className="underline">Settings</Link>.
           </p>
+        ) : (
+          <>
+            <ul className="space-y-1">
+              {data.windows.map((w) => (
+                <li key={w.id} className="flex items-center gap-2">
+                  <span className="h-3 w-3 shrink-0 rounded-sm" style={{ backgroundColor: w.color }} aria-hidden />
+                  <span className="min-w-0 flex-1 truncate">{w.name}</span>
+                  <span className="text-xs tabular-nums text-muted">
+                    {w.start}–{w.end}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <ToggleForm
+              action={toggleWindowsFrontAction}
+              checked={data.filters.windowsInFront}
+              fields={{}}
+              className="mt-2"
+              label={<span>Show in front</span>}
+              title="Draw the windows and their names over the blocks"
+            />
+            <p className="mt-1 pl-5 text-xs text-muted">
+              Colours are set in <Link href="/settings#windows" className="underline">Settings</Link>.
+            </p>
+          </>
         )}
       </section>
 

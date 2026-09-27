@@ -74,10 +74,20 @@ Calendar, with TimeBlock's plan drawn in:
 | **Week** | Monday – Sunday |
 | **Month** | Whole weeks; multi-day events as bars across the days they cover, other events as coloured dots with their start time |
 
-‹ › move by the size of the view; clicking a date opens that day. The hours
-shown default to **05:00 – 00:00** (in your Settings timezone, CET/CEST) and
-change in **Settings → Calendar**, which also sets the view it opens in. The time
-grid opens scrolled to an hour before now, like Google.
+‹ › move by the size of the view; clicking a date opens that day. The Calendar
+opens in **Week** by default; choose another under **Settings → Calendar →
+Default view**. The hours shown default to **05:00 – 00:00** (in your Settings
+timezone, CET/CEST) and change in the same place. The time grid opens scrolled
+to an hour before now, like Google.
+
+**Time windows are coloured bands.** Each window (Learning, Work…) is drawn in
+its own colour with a stripe down its left edge, and its name appears once per
+view — on the first day it opens — instead of on every day. The left panel's
+**Time windows** legend lists each window with its colour and hours. Tick
+**Show in front** to draw the bands and their names over the blocks (clicks and
+drags still reach the blocks); untick to send them back behind. Set a window's
+colour in **Settings → Time windows**; windows without one get distinct
+defaults (Learning green, Work orange) that never match a block's colour.
 
 **Colours are Google's.** An event uses its own colour if it has one, else its
 calendar's — mapped to the palette Google Calendar's web app shows (the API
@@ -88,8 +98,10 @@ in Google are dashed; declined events are outlined and struck through.
 **Hide what you do not need to see.** Unticked items are removed from the view,
 so a busy month becomes readable:
 
-- **Show** (left panel): a checkbox per Google calendar, plus *TimeBlock plan*.
-  Untick to hide that calendar.
+- **Google calendars** (Settings → Calendar): a checkbox per calendar; untick
+  to hide it. It lives in Settings because it rarely changes — the left panel
+  only shows how many are on. Planning still avoids a hidden calendar's busy time.
+- **TimeBlock plan** (left panel): untick to hide TimeBlock's own blocks.
 - **The checkbox on an event** appears when you point at it: untick to hide the
   event. A repeating event hides every time it repeats (hide *Ranajky* once, and
   every breakfast is gone).

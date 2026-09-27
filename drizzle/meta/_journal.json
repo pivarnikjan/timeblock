@@ -36,6 +36,13 @@
       "when": 1790501646487,
       "tag": "0004_pinned_blocks",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790505415083,
+      "tag": "0005_window_colors",
+      "breakpoints": true
     }
   ]
 }
