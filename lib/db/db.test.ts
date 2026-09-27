@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { horizons, settings, tasks, timeWindows } from './schema';
+import { blocks, horizons, settings, tasks, timeWindows } from './schema';
 import { testDb } from './testing';
 
 describe('sqlite-proxy bridge over node:sqlite', () => {
@@ -91,5 +91,18 @@ describe('sqlite-proxy bridge over node:sqlite', () => {
     }).not.toThrow();
     const count = sqlite.prepare('SELECT COUNT(*) AS n FROM settings').get() as { n: number };
     expect(count.n).toBe(1);
+  });
+
+  it('stores whether a block was placed by hand, defaulting to planner-placed', async () => {
+    const { db } = testDb();
+    const at = { date: '2026-09-28', startsAt: '2026-09-28T08:30:00Z', endsAt: '2026-09-28T09:30:00Z' };
+
+    const [planned] = await db.insert(blocks).values(at).returning();
+    const [moved] = await db.insert(blocks).values({ ...at, pinned: true }).returning();
+
+    expect(planned.pinned).toBe(false);
+    expect(moved.pinned).toBe(true);
+    const back = await db.select().from(blocks).where(eq(blocks.pinned, true));
+    expect(back.map((b) => b.id)).toEqual([moved.id]);
   });
 });

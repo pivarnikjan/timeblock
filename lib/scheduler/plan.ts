@@ -27,6 +27,13 @@ export interface PlannableTask {
   sortOrder: number;
   /** Resolved window (own, inherited, or default); null = anytime. */
   windowId: number | null;
+  /**
+   * Tasks sharing a key are one course or path that must be worked in order
+   * (see `sequenceIndex`). Null = independent work that may go anywhere.
+   */
+  sequenceKey?: string | null;
+  /** Position inside the sequence; lower comes first. Only compared within one key. */
+  sequenceIndex?: number;
 }
 
 export interface PlannedSegment {
@@ -57,23 +64,96 @@ export interface Plan {
 }
 
 /**
- * Order work is offered in: overdue first, then priority, then sequence.
+ * Order work is offered in: overdue first, then priority, then the earliest
+ * deadline, then capture order.
  *
- * `sortOrder` sits after priority so that, within one priority, the order work
- * was captured or imported in — a course's module order — is kept.
+ * Week work may be done ahead of its week, so everything open competes for the
+ * same windows; earliest-deadline-first makes sure this week's work of one goal
+ * is not pushed out by next month's work of a goal that was imported earlier.
+ * Within one deadline, the order work was captured or imported in is kept.
+ * Tasks of one sequence are then put back into course order (see
+ * `enforceSequences`), so no ranking rule can make section 5 jump ahead of
+ * section 4.
  */
 export function rankTasks<T extends PlannableTask>(tasks: T[], date: string): T[] {
   const overdue = (t: T) => (t.dueDate !== null && t.dueDate < date ? 0 : 1);
   const dueRank = (t: T) => t.dueDate ?? '9999-12-31';
 
-  return [...tasks].sort(
+  const ranked = [...tasks].sort(
     (a, b) =>
       overdue(a) - overdue(b) ||
       a.priority - b.priority ||
-      a.sortOrder - b.sortOrder ||
       dueRank(a).localeCompare(dueRank(b)) ||
+      a.sortOrder - b.sortOrder ||
       a.id - b.id,
   );
+  return enforceSequences(ranked);
+}
+
+/**
+ * Re-seats each sequence's tasks, in sequence order, into the positions that
+ * sequence already holds in the ranking.
+ *
+ * Different courses still interleave exactly as ranked — only the order inside
+ * one course is fixed. The earliest unfinished module takes the best slot any
+ * of its course's modules earned.
+ */
+export function enforceSequences<T extends PlannableTask>(ranked: T[]): T[] {
+  const members = new Map<string, T[]>();
+  for (const t of ranked) {
+    if (!t.sequenceKey) continue;
+    members.set(t.sequenceKey, [...(members.get(t.sequenceKey) ?? []), t]);
+  }
+  for (const list of members.values()) {
+    list.sort((a, b) => (a.sequenceIndex ?? 0) - (b.sequenceIndex ?? 0) || a.id - b.id);
+  }
+  const next = new Map<string, number>();
+  return ranked.map((t) => {
+    if (!t.sequenceKey) return t;
+    const i = next.get(t.sequenceKey) ?? 0;
+    next.set(t.sequenceKey, i + 1);
+    return members.get(t.sequenceKey)![i];
+  });
+}
+
+/**
+ * Splits ranked work into what may be packed today and what has to wait for
+ * an earlier module of its sequence.
+ *
+ * Packing within one window never skips (the queue is taken strictly in
+ * order), so sequence order holds by itself there. What it cannot see is a
+ * sequence crossing windows: a module in the Work window must not be done at
+ * 14:00 while the module before it is still waiting in Learning. So a sequence
+ * is only offered up to its first task in a different window from its head.
+ */
+export function gateSequences<T extends PlannableTask>(ranked: T[]): { ready: T[]; waiting: { task: T; after: T }[] } {
+  /** Per sequence: the window its head is in, and the last task offered. */
+  const open = new Map<string, { windowId: number | null; last: T }>();
+  /** Per sequence: the task everything after it is waiting for. */
+  const stopped = new Map<string, T>();
+  const ready: T[] = [];
+  const waiting: { task: T; after: T }[] = [];
+
+  // `ranked` already holds each sequence in order, so the first member seen is its head.
+  for (const t of ranked) {
+    const key = t.sequenceKey;
+    if (!key) {
+      ready.push(t);
+      continue;
+    }
+    const stop = stopped.get(key);
+    const run = open.get(key);
+    if (stop) {
+      waiting.push({ task: t, after: stop });
+    } else if (run && run.windowId !== t.windowId) {
+      stopped.set(key, run.last);
+      waiting.push({ task: t, after: run.last });
+    } else {
+      open.set(key, { windowId: t.windowId, last: t });
+      ready.push(t);
+    }
+  }
+  return { ready, waiting };
 }
 
 interface QueueItem {
@@ -103,9 +183,9 @@ export function blockCap(left: number, shape: DayShape): number {
  *
  * 1. Each block is capped by `blockCap`.
  * 2. Whole tasks are combined into the block in order while they fit.
- * 3. When the next task does not fit, the block closes if it already holds the
- *    minimum; otherwise the task is split to fill it, keeping at least
- *    MIN_SPLIT_MIN on both sides of the cut.
+ * 3. When the next task does not fit, it is split to fill the block, keeping
+ *    at least MIN_SPLIT_MIN on both sides of the cut; if that is impossible
+ *    the block closes as it is.
  * 4. A block lasts its content rounded up to 5 minutes, never under the minimum.
  * 5. Every block is followed by the break; lunch and the window edge count as one.
  */
@@ -138,8 +218,9 @@ export function packWindow(
           queue.shift();
           continue;
         }
-        if (content >= shape.minBlockMin) break;
-
+        // Fill the rest of the block with the start of the next task rather than
+        // leave it idle — the goal finishes sooner. Never cut a piece under
+        // MIN_SPLIT_MIN on either side; what cannot be cut stays whole for the next block.
         const placed = Math.min(space, item.remaining - MIN_SPLIT_MIN);
         if (placed >= MIN_SPLIT_MIN) {
           segments.push({ taskId: item.taskId, minutes: placed });
@@ -188,13 +269,19 @@ export function planDay(
   const specs = [...windows];
   if (tasks.some((t) => t.windowId === null || !known.has(t.windowId))) specs.push(anytimeWindow(shape));
 
-  const ranked = rankTasks(
-    tasks.filter((t) => t.remainingMin > 0),
-    date,
+  const { ready: ranked, waiting } = gateSequences(
+    rankTasks(
+      tasks.filter((t) => t.remainingMin > 0),
+      date,
+    ),
   );
   const busyNow = [...busy];
   const blocks: PlannedBlock[] = [];
-  const unplaced: UnplacedTask[] = [];
+  const unplaced: UnplacedTask[] = waiting.map(({ task, after }) => ({
+    taskId: task.id,
+    remainingMin: task.remainingMin,
+    reason: `waits for “${after.title}” — it comes first in the same course`,
+  }));
   let freeMinutes = 0;
 
   for (const spec of specs) {

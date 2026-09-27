@@ -1,0 +1,1 @@
+ALTER TABLE `blocks` ADD `pinned` integer DEFAULT false NOT NULL;

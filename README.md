@@ -30,7 +30,9 @@ Year goal          CIS-ITSM Certification                  ⏱ Learning (inherit
 - **Windows are inherited.** A task is scheduled in its own time window, else
   the nearest window set on a goal above it, else the default window.
 - **When work becomes schedulable.** Tasks under a week priority are planned
-  automatically from that week's Monday and carry over until done. A month
+  automatically **as soon as there is room** — the week is their deadline, not
+  the earliest they may start, so a goal finishes as early as your windows
+  allow — and they carry over until done. A month
   outcome's own tasks are its *backlog*: they wait until you move them into a
   week (the weekly ritual) — unless they have a due date or you **Pull in** one
   for today.
@@ -110,14 +112,20 @@ blocks 30–60 min, 15-minute break:
    intersected with free time, lunch removed; slivers under 30 min dropped.
    Windows are filled in order and each one's blocks count as busy for the next,
    so overlapping windows never double-book.
-4. **Rank the work.** Overdue → priority → task order (capture/import order,
-   which keeps a course's module order) → due date.
+4. **Rank the work.** Overdue → priority → earliest deadline (a task's due date
+   or the end of its week/month) → task order (capture/import order). Earliest
+   deadline first keeps this week's work of one goal from being pushed out by
+   next month's work of a goal imported earlier. Then **course order wins**:
+   the tasks under one month outcome are a course, done strictly in order (by
+   week, then task order) — a later module can never jump ahead because it has
+   a higher priority, is overdue, or happens to fit a gap. Different courses
+   still interleave.
 5. **Pack it into calendar blocks.**
    - Short tasks are **combined** into one block (10:30–11:00 = ebook 5 +
      accessibility 5 + welcome 20).
-   - A block closes once it holds 30 minutes and the next task does not fit;
-     otherwise the next task is split to fill it, never leaving less than 15
-     minutes on either side of the cut.
+   - When the next task does not fit, it is split to **fill the block** — no
+     idle minutes — never leaving less than 15 minutes on either side of the
+     cut. (Only what cannot be cut that way is left over, a few minutes a day.)
    - Blocks are sized so the rest of a slot stays usable: a 90-minute slot
      becomes 45 + break + 30 rather than 60 + break + 15 unusable minutes.
      That turns the learning window into **150 usable minutes a day instead of
@@ -136,6 +144,33 @@ Your CIS-ITSM week-1 modules (4h 24m) come out as:
 | Tue | 10:30–11:05 maintain (35) · 11:20–12:00 maintain (15) + improve (25) · 12:30–13:15 improve (31) + summary |
 
 Nothing that fails to fit is silently dropped: the Today view says why.
+
+## Plan the whole calendar
+
+**Plan calendar** (top of the Calendar, every view) plans every day from today
+on, one after another, until every scheduled task has a place:
+
+- Each task lands in its own window (Learning, Work…) on the days that window
+  is open, around your Google meetings, exactly as a single day is planned.
+- **Courses stay in order across days.** Tuesday continues where Monday
+  stopped; section 5 is never placed before section 4 is finished. A course
+  whose modules sit in different windows waits for the earlier module first.
+- **As soon as possible.** Every learning day is filled back to back until the
+  goal is done: work from later weeks is pulled forward rather than waiting for
+  its week, earliest deadline first. Month backlogs and loose tasks are left out (the summary says how many) until you move them into
+  a week or mark them active.
+- The result is **drafts** — dashed on the grid — replacing earlier drafts from
+  today on. **Commit N blocks to Google** sends them all; TimeBlock's earlier,
+  unpinned blocks from today on are replaced. **Discard drafts** throws the
+  proposal away.
+
+**Adjust by hand.** Drag any block that has nothing ticked off to another time
+or another visible day; it snaps to 5 minutes and shows its new time while you
+drag. Where you drop it is where it stays — windows do not apply to a block you
+placed, so a Learning block may end at 14:15. A moved block is **pinned** (📌):
+the next *Plan calendar* or *Generate the day* works around it and does not plan
+its minutes again. **unpin** (in the Today view's block list) hands it back to
+the planner. Moving a committed block moves its Google event too.
 
 ## Importing tasks from CSV
 
@@ -195,11 +230,81 @@ put it in your calendar at the booked time and the planner works around it;
 mark the November outcome done when you pass. Which weeks serve which outcome is
 an example — edit it to your plan.
 
+## Prerequisites
+
+Everything needed to run and work on TimeBlock on a new Windows computer. The
+app itself is plain Node.js; the start, stop and autostart scripts are
+Windows PowerShell.
+
+| Tool | Why | Install | Check |
+| --- | --- | --- | --- |
+| **Node.js 24 LTS or newer** (tested on 26) | Runs the app; the database is Node's built-in `node:sqlite` | `winget install --id OpenJS.NodeJS.LTS --source winget` | `node -v` |
+| **Git** | Get the code, commit | `winget install --id Git.Git --source winget` | `git --version` |
+| **GitHub SSH key** | Clone and push `git@github.com:…` | see [GitHub over SSH](#github-over-ssh) | `ssh -T git@github.com` |
+| **GitHub CLI** (optional) | Open pull requests from the terminal | `winget install --id GitHub.cli --source winget` | `gh --version` |
+| **Google account + Cloud project** | Calendar access | [`docs/google-calendar-setup.md`](docs/google-calendar-setup.md) | **Settings** shows *Connected* |
+
+### Installing with winget
+
+- **Always add `--source winget`.** Without it winget also searches the
+  Microsoft Store, and on a machine whose HTTPS traffic is inspected — an
+  antivirus with HTTPS scanning (e.g. Avast Web Shield) or a company proxy —
+  that fails with `Failed when searching source: msstore … 0x8a15005e : The
+  server certificate did not match any of the expected values`. None of these
+  tools come from the Store.
+- **If winget still fails with a certificate error**, download the installer
+  from the vendor instead: [nodejs.org](https://nodejs.org) (LTS),
+  [git-scm.com](https://git-scm.com/download/win),
+  [cli.github.com](https://cli.github.com) (`gh_*_windows_amd64.msi`).
+- **Open a new terminal after installing.** A terminal that was already open
+  does not see the new program, so it answers `The term 'gh' is not recognized
+  as the name of a cmdlet…`. If a new terminal still does not find it, call it
+  by its full path, e.g. `& "C:\Program Files\GitHub CLI\gh.exe" auth login`.
+
+### GitHub over SSH
+
+Once per computer:
+
+```powershell
+ssh-keygen -t ed25519 -C "you@example.com"   # accept the default file; a passphrase is recommended
+Get-Content $HOME\.ssh\id_ed25519.pub | Set-Clipboard
+```
+
+Paste the key into GitHub → **Settings → SSH and GPG keys → New SSH key**, then
+check with `ssh -T git@github.com` (answer *yes* the first time; it greets you
+by username).
+
+Set your commit identity for this repository. GitHub's no-reply address keeps
+your personal email out of the public history (find it under GitHub →
+**Settings → Emails**):
+
+```powershell
+git config user.name "your-github-username"
+git config user.email "ID+your-github-username@users.noreply.github.com"
+```
+
+### GitHub CLI (for pull requests)
+
+After installing, in a **new** terminal:
+
+```powershell
+gh auth login   # GitHub.com → SSH → your key → Login with a web browser
+gh auth status
+```
+
+Without `gh`, open a pull request from the branch's page on GitHub instead.
+
 ## Setup
 
-```bash
+```powershell
+git clone git@github.com:pivarnikjan/timeblock.git
+cd timeblock
 npm install
+Copy-Item .env.local.example .env.local   # then fill it in: see Connect Google Calendar
 ```
+
+`.env.local` holds your Google client secret. It is git-ignored — never commit
+it, and never paste its values into issues or pull requests.
 
 ### Connect Google Calendar
 
@@ -240,6 +345,25 @@ the port, and opens the Calendar. Undo with `.\scripts\install-autostart.ps1 -Re
 
 Add `-NoBrowser` to skip opening the browser, `-Port 4322` for another port.
 
+**Running the scripts.**
+
+- Run them from the project folder. Anywhere else, `.\scripts\…` does not
+  exist and PowerShell says *The argument 'scripts/start-timeblock.ps1' to the
+  -File parameter does not exist* — `cd` into the project, or give the full
+  path.
+- If Windows refuses to run unsigned scripts, allow it for that one run only
+  (no system setting changes):
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\start-timeblock.ps1 -Restart
+  ```
+
+- Start and deploy from **your own terminal** (Windows Terminal, PowerShell,
+  VS Code). Apps installed as packaged Store/MSIX apps — including some AI
+  coding assistants — can see a private copy of `%LOCALAPPDATA%`; a server
+  started from their built-in terminal would then use a different database than
+  yours.
+
 The server runs hidden; its output goes to `%LOCALAPPDATA%\timeblock\logs\`
 (`server.out.log`, `server.err.log`, and the previous run's as `*.previous.log`).
 Look there first when something fails.
@@ -279,6 +403,19 @@ npm test              # scheduler, hierarchy, CSV import, database bridge
 npm run build         # type-check and production build
 npm run db:generate   # regenerate SQL after editing lib/db/schema.ts
 ```
+
+To work on a change: branch, test, push, open a pull request.
+
+```powershell
+git checkout -b feature/short-name
+npm test; npm run lint
+git push -u origin feature/short-name
+gh pr create --base main       # or open the PR from the branch page on GitHub
+```
+
+Try changes against a throwaway database, never your real one: run
+`next dev` on another port with its own data folder, e.g.
+`$env:TIMEBLOCK_DATA_DIR="$env:TEMP\timeblock-test"; npx next dev --port 4322`.
 
 Migrations in `drizzle/` are applied automatically the first time the database
 is opened. Data changes drizzle-kit cannot express (seeding windows, copying old

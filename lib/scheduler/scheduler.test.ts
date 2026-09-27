@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
 import { dayWindow, freeSlots, windowInterval, type BusySpan, type DayShape, type WindowSpec } from './day';
-import { forecast } from './forecast';
+import { forecast, planRange } from './forecast';
 import { blockCap, planDay, rankTasks, type PlannableTask, type PlannedBlock } from './plan';
 
 const TZ = 'Europe/Vienna';
@@ -301,5 +301,131 @@ describe('forecast', () => {
 
     expect(result.finishes.has(1)).toBe(false);
     expect(result.leftover.get(1)).toBe(30);
+  });
+});
+
+describe('course sequence', () => {
+  const udemy = (id: number, index: number, over: Partial<PlannableTask> = {}) =>
+    task({ id, title: `udemy ${index}`, sequenceKey: 'udemy', sequenceIndex: index, ...over });
+
+  it('keeps a course in order even when a later module outranks an earlier one', () => {
+    const ranked = rankTasks(
+      [
+        udemy(1, 1, { priority: 3 }),
+        udemy(2, 2, { priority: 1 }), // higher priority must not let section 2 jump ahead
+        udemy(3, 3, { dueDate: '2026-09-01' }), // nor may being overdue
+      ],
+      MONDAY,
+    );
+
+    expect(ranked.map((t) => t.title)).toEqual(['udemy 1', 'udemy 2', 'udemy 3']);
+  });
+
+  it('lets two courses interleave while each keeps its own order', () => {
+    const copilot = (id: number, index: number, over: Partial<PlannableTask> = {}) =>
+      task({ id, title: `copilot ${index}`, sequenceKey: 'copilot', sequenceIndex: index, ...over });
+    const ranked = rankTasks(
+      [udemy(1, 1, { sortOrder: 1 }), copilot(2, 2, { sortOrder: 2 }), udemy(3, 2, { sortOrder: 3 }), copilot(4, 1, { sortOrder: 4 })],
+      MONDAY,
+    );
+
+    // Positions are kept per course (udemy 1st and 3rd, copilot 2nd and 4th); members are re-seated in order.
+    expect(ranked.map((t) => t.title)).toEqual(['udemy 1', 'copilot 1', 'udemy 2', 'copilot 2']);
+  });
+
+  it('never skips a module that does not fit to fill the gap with a later one', () => {
+    // 10:30–11:15 then a meeting: 45 free minutes before it. Module 1 needs 90, module 2 only 30.
+    const busy = [meeting(MONDAY, '11:30', '14:00')];
+    const plan = planDay(MONDAY, SHAPE, busy, WINDOWS, [udemy(1, 1, { remainingMin: 90 }), udemy(2, 2, { remainingMin: 30 })]);
+    const titles = new Map([[1, 'udemy 1'], [2, 'udemy 2']]);
+
+    expect(layout(plan.blocks, titles)).toEqual(['10:30–11:15 udemy 1 45']);
+    expect(plan.unplaced.map((u) => u.taskId)).toEqual([1, 2]);
+  });
+
+  it('holds a module in another window until the one before it is finished', () => {
+    const plan = planDay(MONDAY, SHAPE, [], WINDOWS, [
+      udemy(1, 1, { remainingMin: 300 }), // more than a day of Learning
+      udemy(2, 2, { remainingMin: 30, windowId: WORK.id }),
+      task({ id: 3, remainingMin: 30, windowId: WORK.id }), // independent work is unaffected
+    ]);
+
+    const placed = new Set(plan.blocks.flatMap((b) => b.segments.map((s) => s.taskId)));
+    expect(placed.has(2)).toBe(false);
+    expect(placed.has(3)).toBe(true);
+    expect(plan.unplaced.find((u) => u.taskId === 2)?.reason).toMatch(/waits for “udemy 1”/);
+  });
+
+  it('plans the calendar day by day, continuing each course where it stopped', () => {
+    const course = [udemy(1, 1, { remainingMin: 120 }), udemy(2, 2, { remainingMin: 120 }), udemy(3, 3, { remainingMin: 60 })];
+    const result = planRange(
+      MONDAY,
+      10,
+      SHAPE,
+      WINDOWS,
+      course.map((t) => ({ ...t, availableFrom: null })),
+    );
+
+    const order = result.days.flatMap((d) => d.blocks.flatMap((b) => b.segments.map((s) => s.taskId)));
+    // Once a module appears, no earlier module may appear after it.
+    for (let i = 1; i < order.length; i++) expect(order[i]).toBeGreaterThanOrEqual(order[i - 1]);
+    expect(result.days.map((d) => d.date)).toEqual([MONDAY, TUESDAY]);
+    expect(result.leftover.size).toBe(0);
+    expect(result.finishes.get(3)).toBe(TUESDAY);
+  });
+
+  it('skips closed days and stops once everything is placed', () => {
+    const FRIDAY = '2026-10-02';
+    const result = planRange(FRIDAY, 30, SHAPE, WINDOWS, [{ ...udemy(1, 1, { remainingMin: 300 }), availableFrom: null }]);
+
+    // Friday, then (no Learning at the weekend) Monday.
+    expect(result.days.map((d) => d.date)).toEqual([FRIDAY, '2026-10-05']);
+    expect(result.to).toBe('2026-10-05');
+  });
+});
+
+describe('as soon as possible', () => {
+  it('puts the earliest deadline first, even for work captured later', () => {
+    const ranked = rankTasks(
+      [
+        task({ id: 1, title: 'other goal, next month', sortOrder: 1, dueDate: '2026-11-29' }),
+        task({ id: 2, title: 'genai, this week', sortOrder: 50, dueDate: '2026-10-04' }),
+        task({ id: 3, title: 'loose, no deadline', sortOrder: 0 }),
+      ],
+      MONDAY,
+    );
+
+    expect(ranked.map((t) => t.id)).toEqual([2, 1, 3]);
+  });
+
+  it('fills every learning day back to back until the goal is done', () => {
+    // Four weeks of a course, each week's modules due at that week's end — all schedulable now.
+    const weeks = ['2026-10-04', '2026-10-11', '2026-10-18', '2026-10-25'];
+    const course = weeks.flatMap((due, w) =>
+      [50, 40, 60].map((mins, i) =>
+        task({ id: w * 3 + i + 1, remainingMin: mins, dueDate: due, sequenceKey: 'udemy', sequenceIndex: w * 3 + i }),
+      ),
+    );
+    const total = course.reduce((n, t) => n + t.remainingMin, 0); // 600
+
+    const result = planRange(MONDAY, 30, SHAPE, WINDOWS, course.map((t) => ({ ...t, availableFrom: null })));
+    const perDay = result.days.map((d) => [d.date, d.blocks.reduce((n, b) => n + b.segments.reduce((m, s) => m + s.minutes, 0), 0)]);
+
+    // 150 usable learning minutes a day, Monday to Thursday, no gaps between.
+    expect(perDay).toEqual([
+      [MONDAY, 150],
+      [TUESDAY, 150],
+      ['2026-09-30', 150],
+      ['2026-10-01', total - 450],
+    ]);
+  });
+
+  it('fills a block with the start of the next task instead of leaving it idle', () => {
+    // 10:30–11:15 free, then a meeting (its 15-minute buffer starts 11:15).
+    const busy = [meeting(MONDAY, '11:30', '14:00')];
+    const plan = planDay(MONDAY, SHAPE, busy, WINDOWS, [task({ id: 1, remainingMin: 30 }), task({ id: 2, remainingMin: 40 })]);
+
+    expect(layout(plan.blocks, new Map([[1, 'a'], [2, 'b']]))).toEqual(['10:30–11:15 a 30 + b 15']);
+    expect(plan.unplaced.find((u) => u.taskId === 2)?.remainingMin).toBe(25);
   });
 });

@@ -1,7 +1,7 @@
 import 'server-only';
 import { DateTime } from 'luxon';
 import type { Horizon, Settings, Task, TimeWindow } from '@/lib/db/schema';
-import { busySpans, listDayEvents, type CalendarEvent } from '@/lib/google/calendar';
+import { busySpans, listDayEvents, listRangeEvents, type CalendarEvent } from '@/lib/google/calendar';
 import { connectionState, isMissingScopeError, MISSING_SCOPE_HELP, type ConnectionState } from '@/lib/google/client';
 import {
   availability,
@@ -10,9 +10,11 @@ import {
   effectiveWindowId,
   indexHorizons,
   remainingMinutes,
+  sequencePositions,
   subtreeIds,
   type HorizonIndex,
   type Progress,
+  type SequencePosition,
 } from '@/lib/hierarchy';
 import * as blockRepo from '@/lib/repo/blocks';
 import { listAllHorizons } from '@/lib/repo/horizons';
@@ -20,13 +22,16 @@ import { getSettings } from '@/lib/repo/settings';
 import { listAllTasks } from '@/lib/repo/tasks';
 import { listWindows, toSpec } from '@/lib/repo/windows';
 import { atLocalTime, freeSlots, windowInterval, windowOpensOn, type BusySpan, type DayShape, type WindowSpec } from '@/lib/scheduler/day';
-import { forecast, type ForecastTask } from '@/lib/scheduler/forecast';
+import { forecast, planRange, type ForecastTask } from '@/lib/scheduler/forecast';
 import type { Interval } from '@/lib/scheduler/intervals';
 import { planDay, type Plan, type PlannableTask } from '@/lib/scheduler/plan';
 import { nowIn } from '@/lib/time/periods';
 
 /** How far ahead the forecast looks: long enough to see a month's work land. */
 export const FORECAST_DAYS = 42;
+
+/** How far ahead "Plan calendar" may reach: a quarter, so a long course still lands somewhere. */
+export const PLAN_CALENDAR_DAYS = 92;
 
 export function today(settings: Settings): string {
   return nowIn(settings.timezone).toISODate()!;
@@ -43,6 +48,8 @@ export interface PlanningContext {
   tasks: Task[];
   ticked: Map<number, number>;
   progress: Map<number, Progress>;
+  /** Course order per task — see `sequencePositions`. */
+  sequences: Map<number, SequencePosition>;
 }
 
 export async function loadContext(): Promise<PlanningContext> {
@@ -63,10 +70,12 @@ export async function loadContext(): Promise<PlanningContext> {
     tasks,
     ticked,
     progress: computeProgress({ horizons, tasks, ticked }),
+    sequences: sequencePositions(tasks, indexHorizons(horizons)),
   };
 }
 
 function toPlannable(task: Task, ctx: PlanningContext): PlannableTask {
+  const sequence = ctx.sequences.get(task.id);
   return {
     id: task.id,
     title: task.title,
@@ -76,6 +85,8 @@ function toPlannable(task: Task, ctx: PlanningContext): PlannableTask {
     dueDate: effectiveDeadline(task, ctx.byId),
     sortOrder: task.sortOrder,
     windowId: effectiveWindowId(task, ctx.byId, ctx.settings.defaultWindowId),
+    sequenceKey: sequence?.key ?? null,
+    sequenceIndex: sequence?.index ?? 0,
   };
 }
 
@@ -116,11 +127,12 @@ export async function loadCalendar(date: string, settings: Settings): Promise<Ca
 
 /**
  * Time the planner must not use on `date` besides meetings: blocks already
- * ticked off (history), and — when planning today — everything before now.
+ * ticked off (history), blocks placed by hand, and — when planning today —
+ * everything before now.
  */
 function reservedSpans(ctx: PlanningContext, date: string, blocks: blockRepo.BlockWithSegments[]): BusySpan[] {
   const spans: BusySpan[] = blocks
-    .filter((b) => b.state === 'done' || blockRepo.isLocked(b))
+    .filter((b) => b.date === date && blockRepo.isFixed(b))
     .map((b) => ({ start: b.startsAt, end: b.endsAt }));
 
   if (date === today(ctx.settings)) {
@@ -133,24 +145,157 @@ function reservedSpans(ctx: PlanningContext, date: string, blocks: blockRepo.Blo
   return spans;
 }
 
+/**
+ * Minutes per task already given a place by hand and not yet ticked: a pinned
+ * block from `from` on counts as planned, so its work is not planned twice.
+ */
+function pinnedMinutes(blocks: blockRepo.BlockWithSegments[], from: string): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const block of blocks) {
+    if (!block.pinned || block.date < from || block.state === 'done') continue;
+    for (const s of block.segments) {
+      if (s.doneAt === null) out.set(s.taskId, (out.get(s.taskId) ?? 0) + s.minutes);
+    }
+  }
+  return out;
+}
+
+const withoutPinned = <T extends PlannableTask>(tasks: T[], pinned: Map<number, number>): T[] =>
+  tasks
+    .map((t) => ({ ...t, remainingMin: Math.max(0, t.remainingMin - (pinned.get(t.id) ?? 0)) }))
+    .filter((t) => t.remainingMin > 0);
+
+const toDrafts = (blocks: Plan['blocks']): blockRepo.DraftBlock[] =>
+  blocks.map((b) => ({
+    startsAt: b.start.toUTC().toISO()!,
+    endsAt: b.end.toUTC().toISO()!,
+    windowId: b.windowId,
+    segments: b.segments,
+  }));
+
 /** Builds a fresh proposal for `date` and stores it as drafts, replacing any earlier one. */
 export async function generateDay(date: string): Promise<Plan> {
   const ctx = await loadContext();
-  const [calendar, blocks] = await Promise.all([loadCalendar(date, ctx.settings), blockRepo.listForDate(date)]);
+  const [calendar, blocks] = await Promise.all([loadCalendar(date, ctx.settings), blockRepo.listFrom(date)]);
 
   const busy = [...calendar.busy, ...reservedSpans(ctx, date, blocks)];
-  const plan = planDay(date, ctx.shape, busy, ctx.specs, schedulableOn(ctx, date));
+  const tasks = withoutPinned(schedulableOn(ctx, date), pinnedMinutes(blocks, date));
+  const plan = planDay(date, ctx.shape, busy, ctx.specs, tasks);
 
-  await blockRepo.replaceDrafts(
-    date,
-    plan.blocks.map((b) => ({
-      startsAt: b.start.toUTC().toISO()!,
-      endsAt: b.end.toUTC().toISO()!,
-      windowId: b.windowId,
-      segments: b.segments,
-    })),
-  );
+  await blockRepo.replaceDrafts(date, toDrafts(plan.blocks));
   return plan;
+}
+
+/** What "Plan calendar" did, for the confirmation under the button. */
+export interface CalendarPlanSummary {
+  from: string;
+  /** First and last day that received a block; null when nothing was placed. */
+  firstDate: string | null;
+  lastDate: string | null;
+  blocks: number;
+  days: number;
+  plannedMinutes: number;
+  tasksPlaced: number;
+  /** Tasks with minutes that did not fit before the planning horizon ran out. */
+  unfinished: { title: string; minutes: number }[];
+  /** Open tasks nobody asked to schedule: month backlogs and loose tasks. */
+  notScheduled: number;
+  /** Blocks placed by hand that the plan worked around. */
+  pinned: number;
+  problem: string | null;
+}
+
+/** Busy spans per local date across a range, read from Google in one pass. */
+async function loadRangeBusy(
+  from: string,
+  toExclusive: string,
+  settings: Settings,
+): Promise<{ busy: Map<string, BusySpan[]>; problem: string | null }> {
+  const busy = new Map<string, BusySpan[]>();
+  const status = connectionState().status;
+  if (status === 'missing-scope') return { busy, problem: MISSING_SCOPE_HELP };
+  if (status !== 'connected') return { busy, problem: null };
+
+  let events: CalendarEvent[];
+  try {
+    events = await listRangeEvents(from, toExclusive, settings.timezone);
+  } catch (error) {
+    return { busy, problem: isMissingScopeError(error) ? MISSING_SCOPE_HELP : (error as Error).message };
+  }
+
+  // A span is filed under every local date it touches; freeSlots clips it to each day's windows.
+  for (const span of busySpans(events)) {
+    let day = DateTime.fromISO(span.start, { zone: settings.timezone }).startOf('day');
+    const end = DateTime.fromISO(span.end, { zone: settings.timezone });
+    while (day < end) {
+      const key = day.toISODate()!;
+      busy.set(key, [...(busy.get(key) ?? []), span]);
+      day = day.plus({ days: 1 });
+    }
+  }
+  return { busy, problem: null };
+}
+
+/**
+ * "Plan calendar": lays every schedulable task into its window, day after day
+ * from today, until all of it has a place — around meetings, around blocks
+ * already ticked off or placed by hand, and keeping every course in order.
+ *
+ * The result is stored as drafts, replacing every earlier unpinned draft from
+ * today on. Nothing reaches Google until the plan is committed.
+ */
+export async function planCalendar(): Promise<CalendarPlanSummary> {
+  const ctx = await loadContext();
+  const from = today(ctx.settings);
+  const zone = ctx.settings.timezone;
+  const until = DateTime.fromISO(from, { zone }).plus({ days: PLAN_CALENDAR_DAYS }).toISODate()!;
+
+  const [calendar, blocks] = await Promise.all([loadRangeBusy(from, until, ctx.settings), blockRepo.listFrom(from)]);
+
+  const busyByDate = new Map(calendar.busy);
+  for (const date of new Set([from, ...blocks.map((b) => b.date)])) {
+    busyByDate.set(date, [...(busyByDate.get(date) ?? []), ...reservedSpans(ctx, date, blocks)]);
+  }
+
+  const forecastable: ForecastTask[] = [];
+  for (const task of ctx.tasks) {
+    const when = availability(task, ctx.byId);
+    if (when.kind === 'never') continue;
+    forecastable.push({
+      ...toPlannable(task, ctx),
+      availableFrom: when.kind === 'from' && when.date > from ? when.date : null,
+    });
+  }
+  const tasks = withoutPinned(forecastable, pinnedMinutes(blocks, from));
+
+  const plan = planRange(from, PLAN_CALENDAR_DAYS, ctx.shape, ctx.specs, tasks, busyByDate);
+  await blockRepo.replaceDraftsFrom(
+    from,
+    plan.days.map((d) => ({ date: d.date, drafts: toDrafts(d.blocks) })),
+  );
+
+  const segments = plan.days.flatMap((d) => d.blocks.flatMap((b) => b.segments));
+  const titleOf = new Map(ctx.tasks.map((t) => [t.id, t.title]));
+  const offered = new Set(forecastable.map((t) => t.id));
+
+  return {
+    from,
+    firstDate: plan.days[0]?.date ?? null,
+    lastDate: plan.days.at(-1)?.date ?? null,
+    blocks: plan.days.reduce((n, d) => n + d.blocks.length, 0),
+    days: plan.days.length,
+    plannedMinutes: segments.reduce((n, s) => n + s.minutes, 0),
+    tasksPlaced: new Set(segments.map((s) => s.taskId)).size,
+    unfinished: [...plan.leftover].map(([id, minutes]) => ({ title: titleOf.get(id) ?? `#${id}`, minutes })),
+    notScheduled: ctx.tasks.filter(
+      (t) =>
+        (t.status === 'backlog' || t.status === 'active') &&
+        !offered.has(t.id) &&
+        remainingMinutes(t, ctx.ticked.get(t.id) ?? 0) > 0,
+    ).length,
+    pinned: blocks.filter((b) => b.pinned && b.state !== 'done').length,
+    problem: calendar.problem,
+  };
 }
 
 export type HorizonOutlook =

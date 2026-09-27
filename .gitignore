@@ -48,3 +48,6 @@ next-env.d.ts
 *.db-shm
 credentials.json
 /data/
+
+# scratch files (screenshots, generated plans) - never commit
+/temp/

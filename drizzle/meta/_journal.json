@@ -29,6 +29,13 @@
       "when": 1790452672455,
       "tag": "0003_calendar_view",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790501646487,
+      "tag": "0004_pinned_blocks",
+      "breakpoints": true
     }
   ]
 }
