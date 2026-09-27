@@ -1,20 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { MainNav } from "@/components/main-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "TimeBlock",
   description: "Plan the year down to the hour, then put it in the calendar.",
 };
-
-const NAV = [
-  { href: "/calendar", label: "Calendar" },
-  { href: "/week", label: "Week" },
-  { href: "/month", label: "Month" },
-  { href: "/year", label: "Year" },
-  { href: "/tasks", label: "Tasks" },
-  { href: "/settings", label: "Settings" },
-] as const;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -25,15 +17,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Link href="/calendar" className="mr-4 font-semibold tracking-tight">
               Time<span className="text-accent">Block</span>
             </Link>
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-md px-3 py-1.5 text-sm text-muted transition-colors hover:bg-background hover:text-foreground"
-              >
-                {item.label}
-              </Link>
-            ))}
+            <MainNav />
           </nav>
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>

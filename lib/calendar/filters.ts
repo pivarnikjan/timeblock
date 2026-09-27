@@ -12,7 +12,10 @@ export interface CalendarFilters {
   hidePlan: boolean;
   /** Individually hidden events, by `eventKey`, with the title for listing them. */
   hiddenEvents: Record<string, string>;
-  /** Views that show only multi-day events. */
+  /**
+   * Views that show only multi-day events. Only Month offers the switch — it is
+   * for condensed days; a view that shows hours needs its timed events.
+   */
   multiDayOnly: CalendarView[];
   /** Draw time-window bands and their names over the blocks instead of behind them. */
   windowsInFront: boolean;
@@ -73,7 +76,8 @@ export interface VisibilityInput {
 }
 
 export function isHidden(item: VisibilityInput, filters: CalendarFilters, view: CalendarView): boolean {
-  if (filters.multiDayOnly.includes(view) && !item.multiDay) return true;
+  // Choices stored for other views before only Month offered the switch are ignored.
+  if (view === 'month' && filters.multiDayOnly.includes(view) && !item.multiDay) return true;
   if (item.isBlock) return filters.hidePlan;
   if (item.calendarId && filters.hiddenCalendars.includes(item.calendarId)) return true;
   return item.key !== null && item.key in filters.hiddenEvents;

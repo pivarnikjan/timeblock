@@ -32,6 +32,18 @@ export interface WindowSpec {
   weekdays: number[];
 }
 
+/**
+ * The order windows are listed, drawn and filled in: by start time, then end
+ * time, then name — so Training 08:15 comes before Learning 10:30 however the
+ * windows were created.
+ */
+export function compareWindows(
+  a: { start: string; end: string; name: string },
+  b: { start: string; end: string; name: string },
+): number {
+  return a.start.localeCompare(b.start) || a.end.localeCompare(b.end) || a.name.localeCompare(b.name);
+}
+
 export function atLocalTime(date: string, hhmm: string, zone: string): DateTime {
   const [hour, minute] = hhmm.split(':').map(Number);
   const dt = DateTime.fromISO(date, { zone }).set({ hour, minute, second: 0, millisecond: 0 });

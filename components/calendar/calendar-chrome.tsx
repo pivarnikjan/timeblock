@@ -66,13 +66,13 @@ function IconLink({ href: to, label, children }: { href: string; label: string; 
 
 /**
  * The left-hand panel: TimeBlock's own plan, the time windows with their
- * colours (and whether they sit behind or in front of the blocks), the "only
- * multi-day events" switch for the current view, and the events hidden one by
- * one — each a click away from coming back. Which Google calendars are shown
+ * colours (and whether they sit behind or in front of the blocks), in Month the
+ * "only multi-day events" switch, and the events hidden one by one — each a
+ * click away from coming back. Which Google calendars are shown
  * rarely changes, so that choice lives in Settings → Calendar.
  */
 export function FilterPanel({ data }: { data: CalendarData }) {
-  const multiOnly = data.filters.multiDayOnly.includes(data.view);
+  const multiOnly = data.filters.multiDayOnly.includes('month');
   const hidden = Object.entries(data.filters.hiddenEvents);
 
   return (
@@ -141,17 +141,19 @@ export function FilterPanel({ data }: { data: CalendarData }) {
         )}
       </section>
 
-      <section>
-        <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Focus</h2>
-        <ToggleForm
-          action={toggleMultiDayOnlyAction}
-          checked={multiOnly}
-          fields={{ view: data.view }}
-          label={<span>Only multi-day events</span>}
-          title="Show only events that span several days in this view"
-        />
-        <p className="mt-1 pl-5 text-xs text-muted">Remembered separately for each view.</p>
-      </section>
+      {data.view === 'month' && (
+        <section>
+          <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Focus</h2>
+          <ToggleForm
+            action={toggleMultiDayOnlyAction}
+            checked={multiOnly}
+            fields={{ view: 'month' }}
+            label={<span>Only multi-day events</span>}
+            title="Show only events that span several days — trips, holidays, conferences"
+          />
+          <p className="mt-1 pl-5 text-xs text-muted">Trips, holidays and conferences at a glance.</p>
+        </section>
+      )}
 
       <section>
         <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
