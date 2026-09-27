@@ -99,6 +99,11 @@ export const blocks = sqliteTable(
     state: text('state', { enum: ['draft', 'synced', 'done', 'cancelled'] })
       .notNull()
       .default('draft'),
+    /**
+     * Placed by hand (dragged on the calendar). Planning works around a pinned
+     * block instead of replacing it, and it may sit outside any window.
+     */
+    pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
     createdAt: text('created_at').notNull().default(now),
     updatedAt: text('updated_at').notNull().default(now),
   },

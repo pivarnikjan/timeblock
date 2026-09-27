@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { DateTime } from 'luxon';
 import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
 import { layoutColumns, layoutLanes } from '@/lib/calendar/layout';
+import { DraggableBlock } from './draggable-block';
 import { chipStyle, HideToggle, PlanLink } from './event-chip';
 import { ScrollArea } from './scroll-area';
 
@@ -121,8 +122,8 @@ export function TimeGrid({ data }: { data: CalendarData }) {
             ))}
           </div>
 
-          {days.map((day) => (
-            <DayColumn key={day} data={data} day={day} timed={timed} height={height} hours={hours} />
+          {days.map((day, i) => (
+            <DayColumn key={day} data={data} day={day} dayIndex={i} timed={timed} height={height} hours={hours} />
           ))}
         </div>
       </ScrollArea>
@@ -133,12 +134,14 @@ export function TimeGrid({ data }: { data: CalendarData }) {
 function DayColumn({
   data,
   day,
+  dayIndex,
   timed,
   height,
   hours,
 }: {
   data: CalendarData;
   day: string;
+  dayIndex: number;
   timed: CalendarItem[];
   height: number;
   hours: number[];
@@ -186,28 +189,49 @@ function DayColumn({
         const { style, className } = chipStyle(item);
         const heightPx = (end - start) * PX_PER_MIN;
         const time = `${item.start.toFormat('HH:mm')} – ${item.end.toFormat('HH:mm')}`;
-        return (
-          <PlanLink
-            key={`${item.id}@${day}`}
-            item={item}
-            className={`group absolute overflow-hidden rounded px-1.5 py-0.5 text-xs leading-tight shadow-sm ${className}`}
-            style={{
-              ...style,
-              top: start * PX_PER_MIN + 1,
-              height: Math.max(heightPx - 2, 14),
-              left: `calc(${(col / cols) * 100}% + 1px)`,
-              width: `calc(${100 / cols}% - 3px)`,
-            }}
-          >
-            <div className="flex items-start gap-1">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium" title={`${item.title} · ${time}`}>
-                  {item.title}
-                </span>
-                {heightPx >= 30 && <span className="block truncate opacity-80">{time}{item.draft ? ' · draft' : ''}</span>}
+        const chipClass = `group absolute overflow-hidden rounded px-1.5 py-0.5 text-xs leading-tight shadow-sm ${className}`;
+        const chipStyleProps = {
+          ...style,
+          top: start * PX_PER_MIN + 1,
+          height: Math.max(heightPx - 2, 14),
+          left: `calc(${(col / cols) * 100}% + 1px)`,
+          width: `calc(${100 / cols}% - 3px)`,
+        };
+        const content = (
+          <div className="flex items-start gap-1">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium" title={`${item.title} · ${time}`}>
+                {item.pinned && <span title="Placed by hand — planning works around it">📌 </span>}
+                {item.title}
               </span>
-              <HideToggle item={item} />
-            </div>
+              {heightPx >= 30 && <span className="block truncate opacity-80">{time}{item.draft ? ' · draft' : ''}</span>}
+            </span>
+            <HideToggle item={item} />
+          </div>
+        );
+
+        // Blocks that start and end on this day can be dragged; anything else stays a link.
+        if (item.movable && item.blockId !== null && item.planDate && item.start.hasSame(item.end.minus({ milliseconds: 1 }), 'day')) {
+          return (
+            <DraggableBlock
+              key={`${item.id}@${day}`}
+              blockId={item.blockId}
+              href={`/calendar?view=day&date=${item.planDate}`}
+              className={chipClass}
+              style={chipStyleProps}
+              dayIndex={dayIndex}
+              dayCount={data.range.days.length}
+              pxPerMin={PX_PER_MIN}
+              startMin={item.start.hour * 60 + item.start.minute}
+              lengthMin={Math.round(item.end.diff(item.start, 'minutes').minutes)}
+            >
+              {content}
+            </DraggableBlock>
+          );
+        }
+        return (
+          <PlanLink key={`${item.id}@${day}`} item={item} className={chipClass} style={chipStyleProps}>
+            {content}
           </PlanLink>
         );
       })}

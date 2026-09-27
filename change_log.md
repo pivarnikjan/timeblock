@@ -16,6 +16,8 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-09-27 | v0.4.1 | [E13 · Plan the whole calendar](#e13--plan-the-whole-calendar) | TB-050 (change) | Done |
+| 2026-09-27 | v0.4 | [E13 · Plan the whole calendar](#e13--plan-the-whole-calendar) | TB-047 – TB-049 | Done |
 | 2026-09-24 | v0.2 | [E6 · Connected goals and progress](#e6--connected-goals-and-progress) | TB-020 – TB-024 | Done |
 | 2026-09-24 | v0.2 | [E7 · Time windows and packed blocks](#e7--time-windows-and-packed-blocks) | TB-025 – TB-028 | Done |
 | 2026-09-24 | v0.2 | [E8 · Forecast, review and carry-over](#e8--forecast-review-and-carry-over) | TB-029 – TB-031 | Done |
@@ -30,6 +32,100 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-09-27 · v0.4 — Plan the whole calendar
+
+**Theme.** One click plans every day until all the work has a place; the plan is
+reviewed and adjusted on the calendar itself.
+
+**Upgrade notes.** Migration `0004_pinned_blocks` adds `blocks.pinned` (every
+existing block starts unpinned). Deploy with `start-timeblock.ps1 -Restart`.
+Behaviour change: tasks under one month outcome are now always scheduled in
+order — priority and overdue no longer reorder them within that outcome.
+
+## E13 · Plan the whole calendar
+
+> Lay a whole course out across the coming weeks in one go, in the order it has
+> to be done, then fine-tune it by dragging.
+
+### TB-047 · Plan calendar
+*As a learner, I want one button that places all my tasks into their windows
+day after day until everything is allocated, so that I do not plan each day by
+hand.*
+
+Acceptance criteria
+- [x] **Plan calendar** on the Calendar plans from today on, each task in its own
+      window on the days it is open, around Google meetings, until every
+      schedulable task is placed (up to three months ahead).
+- [x] Stored as drafts replacing earlier unpinned drafts from today on;
+      **Commit N blocks to Google** and **Discard drafts** act on all of them.
+- [x] The summary says what was placed, over which days, what did not fit, and
+      how many open tasks were left out because they are not in a week.
+
+Where to look: `lib/planner.ts` (`planCalendar`) · `lib/scheduler/forecast.ts`
+(`planRange`, + tests) · `components/plan-calendar-bar.tsx` ·
+`app/actions/plan.ts` · `lib/google/sync.ts` (`commitFrom`).
+
+Decision — the multi-day planner is the forecast's own day-by-day loop, now
+returning its blocks, so the plan and the forecast can never disagree.
+
+### TB-048 · Courses are done in order
+*As a learner following a course, I want its modules scheduled strictly in
+sequence, so that the plan never skips or jumps between sections just because a
+later one fits a gap.*
+
+Acceptance criteria
+- [x] Tasks under one month outcome form a sequence ordered by week, then task
+      order; the same outcome title under the same goal in the next month
+      continues it.
+- [x] Within a sequence, priority, due dates and free gaps never reorder
+      modules; separate courses still interleave.
+- [x] A module in another window waits until the one before it is finished.
+
+Where to look: `lib/hierarchy.ts` (`sequencePositions`, + tests) ·
+`lib/scheduler/plan.ts` (`enforceSequences`, `gateSequences`, + tests).
+
+### TB-049 · Drag blocks to adjust the plan
+*As a planner, I want to drag a block to another time or day, even outside its
+window, so that I can correct the plan where it does not make sense.*
+
+Acceptance criteria
+- [x] Blocks with nothing ticked off drag across the visible days in 5-minute
+      steps, showing the new time while dragging; a short press still opens the day.
+- [x] Windows do not apply to a block placed by hand (a Learning block may end
+      at 14:15).
+- [x] A moved block is pinned: re-planning works around it and does not plan
+      its minutes twice; **unpin** in the Today view releases it.
+- [x] Moving a committed block moves its Google event (Google first, so a
+      refused move changes nothing).
+
+Where to look: `components/calendar/draggable-block.tsx` ·
+`components/calendar/time-grid.tsx` · `app/actions/plan.ts`
+(`moveBlockAction`, `unpinBlockAction`) · `lib/repo/blocks.ts`.
+
+### TB-050 · Finish the goal as soon as possible *(change, 2026-09-27)*
+*As a learner, I want the plan to fill every learning window back to back, so
+that I complete my goal as early as possible instead of waiting for each week.*
+
+Found in use: the GenAI Expert plan filled Monday–Wednesday of each week and left
+Thursday–Friday empty, because week work only became schedulable on its week's
+Monday; blocks also closed with minutes to spare. Finish moved from Tue 27 Oct
+to Fri 9 Oct (23h 41m over 10 consecutive working days).
+
+Acceptance criteria
+- [x] Tasks under any active week priority are schedulable now; the week is
+      their deadline, not a start gate. Supersedes "from that week's Monday".
+- [x] Ranking is overdue → priority → earliest deadline → task order, so pulled
+      forward work never crowds out a sooner deadline of another goal.
+- [x] A block is always filled by splitting the next task (pieces ≥ 15 min);
+      it no longer closes early once it holds 30 minutes.
+- [x] Course order still holds; the Today view lists the next 15 candidates in
+      planning order.
+
+Where to look: `lib/hierarchy.ts` (`availability`) · `lib/scheduler/plan.ts`
+(`rankTasks`, `packWindow`, + tests "as soon as possible").
 
 ---
 

@@ -11,6 +11,7 @@ import {
   formatMinutes,
   indexHorizons,
   remainingMinutes,
+  sequencePositions,
   weekOfMonth,
 } from './hierarchy';
 
@@ -93,11 +94,9 @@ describe('connections', () => {
 describe('when work becomes schedulable', () => {
   const byId = indexHorizons(HORIZONS);
 
-  it('schedules week work from its Monday and keeps carrying it over', () => {
-    expect(availability({ status: 'backlog', horizonId: week1.id, dueDate: null }, byId)).toEqual({
-      kind: 'from',
-      date: '2026-09-28',
-    });
+  it('makes week work schedulable straight away, so a goal can finish early', () => {
+    // Oct · week 1 is 28 Sep – 4 Oct: its end is the deadline, not a start gate.
+    expect(availability({ status: 'backlog', horizonId: week1.id, dueDate: null }, byId)).toEqual({ kind: 'now' });
   });
 
   it('leaves a month backlog for weekly planning to pick from', () => {
@@ -196,5 +195,48 @@ describe('progress roll-up', () => {
     expect(formatMinutes(264)).toBe('4h 24m');
     expect(formatMinutes(60)).toBe('1h');
     expect(formatMinutes(27)).toBe('27m');
+  });
+});
+
+describe('sequence positions', () => {
+  const goal = horizon({ id: 10, level: 'year', title: 'GenAI Expert', periodStart: '2026-01-01', periodEnd: '2026-12-31' });
+  const udemyOct = horizon({ id: 11, level: 'month', title: 'Udemy course', parentId: 10 });
+  const udemyNov = horizon({ id: 12, level: 'month', title: 'Udemy course', parentId: 10, periodStart: '2026-11-01', periodEnd: '2026-11-30' });
+  const copilot = horizon({ id: 13, level: 'month', title: 'Copilot path', parentId: 10 });
+  const wk1 = horizon({ id: 21, level: 'week', title: 'S1-S2', parentId: 11, periodStart: '2026-09-28', periodEnd: '2026-10-04' });
+  const wk2 = horizon({ id: 22, level: 'week', title: 'S3-S6', parentId: 11, periodStart: '2026-10-05', periodEnd: '2026-10-11' });
+  const loneWeek = horizon({ id: 23, level: 'week', title: 'No outcome', periodStart: '2026-10-05', periodEnd: '2026-10-11' });
+  const byId = indexHorizons([goal, udemyOct, udemyNov, copilot, wk1, wk2, loneWeek]);
+
+  it('orders a course by week first, then by list order, and continues it into the next month', () => {
+    const positions = sequencePositions(
+      [
+        task({ id: 1, title: 'S3', horizonId: 22, sortOrder: 1 }), // imported first, but in week 2
+        task({ id: 2, title: 'S1', horizonId: 21, sortOrder: 5 }),
+        task({ id: 3, title: 'S2', horizonId: 21, sortOrder: 6 }),
+        task({ id: 4, title: 'S12', horizonId: 12, sortOrder: 0 }), // same course, November
+      ],
+      byId,
+    );
+    const order = [...positions.entries()].sort((a, b) => a[1].index - b[1].index).map(([id]) => id);
+
+    expect(order).toEqual([2, 3, 1, 4]);
+    expect(new Set([...positions.values()].map((p) => p.key)).size).toBe(1);
+  });
+
+  it('keeps separate courses separate, sequences a bare week on its own, and leaves loose tasks free', () => {
+    const positions = sequencePositions(
+      [
+        task({ id: 1, title: 'udemy', horizonId: 21 }),
+        task({ id: 2, title: 'copilot', horizonId: 13 }),
+        task({ id: 3, title: 'week only', horizonId: 23 }),
+        task({ id: 4, title: 'loose' }),
+      ],
+      byId,
+    );
+
+    expect(positions.get(1)!.key).not.toBe(positions.get(2)!.key);
+    expect(positions.get(3)!.key).toBe('week:23');
+    expect(positions.has(4)).toBe(false);
   });
 });

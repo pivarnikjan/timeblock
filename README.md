@@ -30,7 +30,9 @@ Year goal          CIS-ITSM Certification                  ⏱ Learning (inherit
 - **Windows are inherited.** A task is scheduled in its own time window, else
   the nearest window set on a goal above it, else the default window.
 - **When work becomes schedulable.** Tasks under a week priority are planned
-  automatically from that week's Monday and carry over until done. A month
+  automatically **as soon as there is room** — the week is their deadline, not
+  the earliest they may start, so a goal finishes as early as your windows
+  allow — and they carry over until done. A month
   outcome's own tasks are its *backlog*: they wait until you move them into a
   week (the weekly ritual) — unless they have a due date or you **Pull in** one
   for today.
@@ -110,14 +112,20 @@ blocks 30–60 min, 15-minute break:
    intersected with free time, lunch removed; slivers under 30 min dropped.
    Windows are filled in order and each one's blocks count as busy for the next,
    so overlapping windows never double-book.
-4. **Rank the work.** Overdue → priority → task order (capture/import order,
-   which keeps a course's module order) → due date.
+4. **Rank the work.** Overdue → priority → earliest deadline (a task's due date
+   or the end of its week/month) → task order (capture/import order). Earliest
+   deadline first keeps this week's work of one goal from being pushed out by
+   next month's work of a goal imported earlier. Then **course order wins**:
+   the tasks under one month outcome are a course, done strictly in order (by
+   week, then task order) — a later module can never jump ahead because it has
+   a higher priority, is overdue, or happens to fit a gap. Different courses
+   still interleave.
 5. **Pack it into calendar blocks.**
    - Short tasks are **combined** into one block (10:30–11:00 = ebook 5 +
      accessibility 5 + welcome 20).
-   - A block closes once it holds 30 minutes and the next task does not fit;
-     otherwise the next task is split to fill it, never leaving less than 15
-     minutes on either side of the cut.
+   - When the next task does not fit, it is split to **fill the block** — no
+     idle minutes — never leaving less than 15 minutes on either side of the
+     cut. (Only what cannot be cut that way is left over, a few minutes a day.)
    - Blocks are sized so the rest of a slot stays usable: a 90-minute slot
      becomes 45 + break + 30 rather than 60 + break + 15 unusable minutes.
      That turns the learning window into **150 usable minutes a day instead of
@@ -136,6 +144,33 @@ Your CIS-ITSM week-1 modules (4h 24m) come out as:
 | Tue | 10:30–11:05 maintain (35) · 11:20–12:00 maintain (15) + improve (25) · 12:30–13:15 improve (31) + summary |
 
 Nothing that fails to fit is silently dropped: the Today view says why.
+
+## Plan the whole calendar
+
+**Plan calendar** (top of the Calendar, every view) plans every day from today
+on, one after another, until every scheduled task has a place:
+
+- Each task lands in its own window (Learning, Work…) on the days that window
+  is open, around your Google meetings, exactly as a single day is planned.
+- **Courses stay in order across days.** Tuesday continues where Monday
+  stopped; section 5 is never placed before section 4 is finished. A course
+  whose modules sit in different windows waits for the earlier module first.
+- **As soon as possible.** Every learning day is filled back to back until the
+  goal is done: work from later weeks is pulled forward rather than waiting for
+  its week, earliest deadline first. Month backlogs and loose tasks are left out (the summary says how many) until you move them into
+  a week or mark them active.
+- The result is **drafts** — dashed on the grid — replacing earlier drafts from
+  today on. **Commit N blocks to Google** sends them all; TimeBlock's earlier,
+  unpinned blocks from today on are replaced. **Discard drafts** throws the
+  proposal away.
+
+**Adjust by hand.** Drag any block that has nothing ticked off to another time
+or another visible day; it snaps to 5 minutes and shows its new time while you
+drag. Where you drop it is where it stays — windows do not apply to a block you
+placed, so a Learning block may end at 14:15. A moved block is **pinned** (📌):
+the next *Plan calendar* or *Generate the day* works around it and does not plan
+its minutes again. **unpin** (in the Today view's block list) hands it back to
+the planner. Moving a committed block moves its Google event too.
 
 ## Importing tasks from CSV
 

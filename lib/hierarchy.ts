@@ -81,8 +81,11 @@ export type Availability = { kind: 'now' } | { kind: 'from'; date: string } | { 
  * When a task may be scheduled without anyone clicking "Pull in".
  *
  * - Active tasks: now.
- * - Tasks under an active week priority: from that week's Monday, and they keep
- *   carrying over afterwards until done — unfinished work is never dropped.
+ * - Tasks under an active week priority: now, whichever week it is. The week is
+ *   when the work must be done by (its deadline), not the earliest it may
+ *   start — so a goal finishes as soon as the windows allow, and a day never
+ *   sits empty while next week's modules wait. Unfinished work keeps carrying
+ *   over until done.
  * - Tasks with a due date: from the due date.
  * - Everything else (a month's backlog, loose tasks): not until moved into a
  *   week or marked active. Choosing that is what weekly planning is for.
@@ -91,7 +94,7 @@ export function availability(task: Pick<Task, 'status' | 'horizonId' | 'dueDate'
   if (task.status === 'done' || task.status === 'dropped') return { kind: 'never' };
   if (task.status === 'active') return { kind: 'now' };
   const week = ancestry(task.horizonId, byId).find((h) => h.level === 'week');
-  if (week && week.status === 'active') return { kind: 'from', date: week.periodStart };
+  if (week && week.status === 'active') return { kind: 'now' };
   if (task.dueDate) return { kind: 'from', date: task.dueDate };
   return { kind: 'never' };
 }
@@ -101,6 +104,45 @@ export function effectiveDeadline(task: Pick<Task, 'horizonId' | 'dueDate'>, byI
   const period = ancestry(task.horizonId, byId).find((h) => h.level === 'week' || h.level === 'month');
   const candidates = [task.dueDate, period?.periodEnd ?? null].filter((d): d is string => d !== null);
   return candidates.length > 0 ? candidates.sort()[0] : null;
+}
+
+export interface SequencePosition {
+  key: string;
+  index: number;
+}
+
+/**
+ * Which ordered run of work each task belongs to, and where in it.
+ *
+ * A month outcome is a course or path ("Udemy: Agentic AI Architectures"):
+ * its modules are done in order — by week, then in the order they were
+ * captured or imported — never skipped just because a later one fits a gap.
+ * An outcome with the same title under the same goal in another month is the
+ * same course continuing. A task under a week with no outcome is sequenced
+ * with its week; a task under nothing is independent (absent from the map).
+ */
+export function sequencePositions(
+  tasks: Pick<Task, 'id' | 'horizonId' | 'sortOrder'>[],
+  byId: HorizonIndex,
+): Map<number, SequencePosition> {
+  const placed = tasks.flatMap((task) => {
+    const chain = ancestry(task.horizonId, byId);
+    const month = chain.find((h) => h.level === 'month');
+    const week = chain.find((h) => h.level === 'week');
+    const key = month
+      ? `month:${month.parentId ?? ''}:${month.title.trim().toLowerCase()}`
+      : week
+        ? `week:${week.id}`
+        : null;
+    if (key === null) return [];
+    return [{ id: task.id, key, month: month?.periodStart ?? '', week: week?.periodStart ?? '', sortOrder: task.sortOrder }];
+  });
+
+  placed.sort(
+    (a, b) =>
+      a.month.localeCompare(b.month) || a.week.localeCompare(b.week) || a.sortOrder - b.sortOrder || a.id - b.id,
+  );
+  return new Map(placed.map((p, index) => [p.id, { key: p.key, index }]));
 }
 
 /** Every horizon id in the subtree rooted at `rootId`, itself included. */

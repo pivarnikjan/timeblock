@@ -63,8 +63,8 @@ async function deleteEvent(calendarId: string, eventId: string): Promise<boolean
 /**
  * Pushes the day's drafts to Google, replacing what TimeBlock put there before.
  *
- * Committed blocks with ticked-off work are kept (event and all) as history;
- * only untouched ones are deleted. Deletion is keyed on the block id stamped
+ * Committed blocks with ticked-off work are kept (event and all) as history,
+ * and so are blocks placed by hand (pinned); only untouched ones are deleted. Deletion is keyed on the block id stamped
  * into the event's private extended properties, so an event the user created
  * by hand is never a target.
  */
@@ -77,7 +77,7 @@ export async function commitDay(date: string): Promise<CommitResult> {
   const day = await blockRepo.listForDate(date);
 
   let removed = 0;
-  for (const block of day.filter((b) => b.state === 'synced')) {
+  for (const block of day.filter((b) => b.state === 'synced' && !b.pinned)) {
     const shouldDelete = await blockRepo.retireBlock(block);
     if (shouldDelete && block.googleEventId && (await deleteEvent(calendarId, block.googleEventId))) removed += 1;
   }
@@ -104,6 +104,46 @@ export async function commitDay(date: string): Promise<CommitResult> {
   }
 
   return { created, removed, calendarId };
+}
+
+export interface CommitRangeResult {
+  days: number;
+  created: number;
+  removed: number;
+}
+
+/**
+ * Commits a calendar-wide plan: every day from `from` on that holds drafts,
+ * plus every day still holding TimeBlock blocks the new plan replaced — those
+ * would otherwise stay in Google and double-book the work that moved.
+ */
+export async function commitFrom(from: string): Promise<CommitRangeResult> {
+  const drafts = await blockRepo.draftDatesFrom(from);
+  if (drafts.length === 0) return { days: 0, created: 0, removed: 0 };
+
+  const dates = [...new Set([...drafts.map((d) => d.date), ...(await blockRepo.replaceableSyncedDatesFrom(from))])].sort();
+  const total: CommitRangeResult = { days: drafts.length, created: 0, removed: 0 };
+  for (const date of dates) {
+    const result = await commitDay(date);
+    total.created += result.created;
+    total.removed += result.removed;
+  }
+  return total;
+}
+
+/** Moves a committed block's Google event to where the block now is. */
+export async function moveEvent(block: blockRepo.BlockWithSegments): Promise<void> {
+  if (!block.googleEventId) return;
+  const settings = await getSettings();
+  const calendarId = await ensureTargetCalendar();
+  await calendarApi().events.patch({
+    calendarId,
+    eventId: block.googleEventId,
+    requestBody: {
+      start: { dateTime: block.startsAt, timeZone: settings.timezone },
+      end: { dateTime: block.endsAt, timeZone: settings.timezone },
+    },
+  });
 }
 
 /**

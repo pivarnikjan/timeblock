@@ -32,6 +32,12 @@ export interface CalendarItem {
   hideKey: string | null;
   /** Date the item belongs to for planning (blocks) — links to that day. */
   planDate: string | null;
+  /** TimeBlock's block id (blocks only). */
+  blockId: number | null;
+  /** Can be dragged elsewhere: a block with nothing ticked off yet. */
+  movable: boolean;
+  /** Placed by hand; planning works around it. */
+  pinned: boolean;
 }
 
 export interface WindowBand {
@@ -128,6 +134,9 @@ export async function loadCalendarView(view: CalendarView, anchor: string): Prom
       calendarId: e.calendarId,
       hideKey,
       planDate: null,
+      blockId: null,
+      movable: false,
+      pinned: false,
     });
   }
 
@@ -151,6 +160,9 @@ export async function loadCalendarView(view: CalendarView, anchor: string): Prom
       calendarId: null,
       hideKey: null,
       planDate: b.date,
+      blockId: b.id,
+      movable: b.state !== 'done' && !blockRepo.isLocked(b),
+      pinned: b.pinned,
     });
   }
 

@@ -2,12 +2,14 @@ import Link from 'next/link';
 import { DateTime } from 'luxon';
 import { CalendarHeader, FilterPanel } from '@/components/calendar/calendar-chrome';
 import { MonthGrid } from '@/components/calendar/month-grid';
+import { PlanCalendarBar } from '@/components/plan-calendar-bar';
 import { TimeGrid } from '@/components/calendar/time-grid';
 import { PlanningPanel } from '@/components/planning-panel';
 import { loadCalendarView } from '@/lib/calendar/load';
 import { parseView } from '@/lib/calendar/views';
 import { busySpans } from '@/lib/google/calendar';
 import { loadDay } from '@/lib/planner';
+import * as blockRepo from '@/lib/repo/blocks';
 import { getSettings } from '@/lib/repo/settings';
 import { nowIn } from '@/lib/time/periods';
 
@@ -22,7 +24,13 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
   const asked = typeof params.date === 'string' ? params.date : null;
   const anchor = asked && DateTime.fromISO(asked, { zone }).isValid ? asked : nowIn(zone).toISODate()!;
 
-  const data = await loadCalendarView(view, anchor);
+  const [data, draftDates] = await Promise.all([loadCalendarView(view, anchor), blockRepo.draftDatesFrom(nowIn(zone).toISODate()!)]);
+  const drafts = {
+    blocks: draftDates.reduce((n, d) => n + d.blocks, 0),
+    days: draftDates.length,
+    first: draftDates[0]?.date ?? null,
+    last: draftDates.at(-1)?.date ?? null,
+  };
 
   // The one-day view is where a day is planned: reuse the events just read.
   const day =
@@ -33,6 +41,7 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
   return (
     <div className="space-y-5">
       <CalendarHeader data={data} />
+      <PlanCalendarBar drafts={drafts} googleConnected={data.connection.status === 'connected'} />
 
       {(data.connection.status === 'not-configured' || data.connection.status === 'not-connected') && (
         <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm">

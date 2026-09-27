@@ -7,6 +7,7 @@ import {
   generatePlanAction,
   reviewDayAction,
   toggleSegmentAction,
+  unpinBlockAction,
 } from '@/app/actions/plan';
 import { completeRitualAction } from '@/app/actions/rituals';
 import { setTaskStatusAction } from '@/app/actions/tasks';
@@ -17,6 +18,10 @@ import type { DayView } from '@/lib/planner';
 import * as blockRepo from '@/lib/repo/blocks';
 import { isRitualDone, ritualSteps } from '@/lib/repo/rituals';
 import { minutes } from '@/lib/scheduler/intervals';
+import { rankTasks } from '@/lib/scheduler/plan';
+
+/** How many of the waiting tasks the day view lists, next up first. */
+const LIST_LIMIT = 15;
 
 /**
  * The daily planning ritual for one day — shown under the Calendar's Today
@@ -105,7 +110,7 @@ export async function PlanningPanel({ day }: { day: DayView }) {
             </EmptyState>
           ) : (
             <ul className="space-y-2">
-              {day.candidates.map((c) => {
+              {rankTasks(day.candidates, day.date).slice(0, LIST_LIMIT).map((c) => {
                 const task = ctx.tasks.find((t) => t.id === c.id)!;
                 const windowName = ctx.windows.find((w) => w.id === c.windowId)?.name ?? 'Anytime';
                 return (
@@ -124,6 +129,11 @@ export async function PlanningPanel({ day }: { day: DayView }) {
                   </li>
                 );
               })}
+              {day.candidates.length > LIST_LIMIT && (
+                <li className="px-3 text-xs text-muted">
+                  …and {day.candidates.length - LIST_LIMIT} more after these, in this order.
+                </li>
+              )}
             </ul>
           )}
         </section>
@@ -272,6 +282,15 @@ function BlockChecklist({ day }: { day: DayView }) {
                 {DateTime.fromISO(block.endsAt, { zone }).toFormat('HH:mm')}
               </span>
               <span>{block.state === 'draft' ? 'draft' : block.state === 'done' ? 'kept' : 'in Google'}</span>
+              {block.pinned && block.state !== 'done' && (
+                <form action={unpinBlockAction} className="flex items-center gap-1">
+                  <span title="Placed by hand — planning works around it">📌 pinned</span>
+                  <input type="hidden" name="blockId" value={block.id} />
+                  <button type="submit" className="text-accent hover:underline" title="Let the next plan move or replace this block">
+                    unpin
+                  </button>
+                </form>
+              )}
               {!allDone && (
                 <form action={completeBlockAction} className="ml-auto">
                   <input type="hidden" name="blockId" value={block.id} />
