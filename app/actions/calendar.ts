@@ -13,7 +13,7 @@ function refresh() {
   revalidatePath('/calendar');
 }
 
-/** Calendar checkbox in the left panel: unticked hides that calendar's events. */
+/** Calendar checkbox in Settings → Calendar: unticked hides that calendar's events. */
 export async function toggleCalendarAction(form: FormData): Promise<void> {
   const id = str(form, 'calendarId');
   const on = shown(form);
@@ -21,13 +21,20 @@ export async function toggleCalendarAction(form: FormData): Promise<void> {
     ...f,
     hiddenCalendars: on ? f.hiddenCalendars.filter((c) => c !== id) : [...new Set([...f.hiddenCalendars, id])],
   }));
-  refresh();
+  revalidatePath('/', 'layout');
 }
 
 /** "TimeBlock plan" checkbox. */
 export async function togglePlanAction(form: FormData): Promise<void> {
   const on = shown(form);
   await updateCalendarFilters((f) => ({ ...f, hidePlan: !on }));
+  refresh();
+}
+
+/** "Show in front": draw time-window bands and names over the blocks instead of behind them. */
+export async function toggleWindowsFrontAction(form: FormData): Promise<void> {
+  const on = shown(form);
+  await updateCalendarFilters((f) => ({ ...f, windowsInFront: on }));
   refresh();
 }
 

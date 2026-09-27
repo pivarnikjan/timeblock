@@ -6,8 +6,8 @@ import { connectionState, isMissingScopeError, MISSING_SCOPE_HELP, type Connecti
 import * as blockRepo from '@/lib/repo/blocks';
 import { getSettings, getCalendarFilters } from '@/lib/repo/settings';
 import { listWindows, toSpec } from '@/lib/repo/windows';
-import { windowInterval, windowOpensOn, type WindowSpec } from '@/lib/scheduler/day';
 import { nowIn } from '@/lib/time/periods';
+import { windowBands, windowLegend, type WindowBand, type WindowLegend } from './bands';
 import { energyColor, eventColor, textOn } from './colors';
 import { eventKey, isHidden, type CalendarFilters } from './filters';
 import { calendarRange, visibleHours, type CalendarRange, type CalendarView } from './views';
@@ -40,12 +40,6 @@ export interface CalendarItem {
   pinned: boolean;
 }
 
-export interface WindowBand {
-  name: string;
-  start: DateTime;
-  end: DateTime;
-}
-
 export interface CalendarData {
   view: CalendarView;
   range: CalendarRange;
@@ -59,6 +53,8 @@ export interface CalendarData {
   calendars: (CalendarSummary & { hidden: boolean })[];
   filters: CalendarFilters;
   bands: Record<string, WindowBand[]>;
+  /** Every time window with its colour, for the legend. */
+  windows: WindowLegend[];
   connection: ConnectionState;
   problem: string | null;
   settings: Settings;
@@ -168,13 +164,8 @@ export async function loadCalendarView(view: CalendarView, anchor: string): Prom
 
   items.sort((a, b) => a.start.toMillis() - b.start.toMillis());
 
-  const specs: WindowSpec[] = windows.map(toSpec);
-  const bands: Record<string, WindowBand[]> = {};
-  for (const day of range.days) {
-    bands[day] = specs
-      .filter((s) => windowOpensOn(s, day, zone))
-      .map((s) => ({ name: s.name, ...windowInterval(day, s, zone) }));
-  }
+  const specs = windows.map((w) => ({ ...toSpec(w), id: w.id, color: w.color }));
+  const bands = windowBands(range.days, specs, zone);
 
   return {
     view,
@@ -188,6 +179,7 @@ export async function loadCalendarView(view: CalendarView, anchor: string): Prom
     calendars: shownCalendars.map((c) => ({ ...c, hidden: filters.hiddenCalendars.includes(c.id) })),
     filters,
     bands,
+    windows: windowLegend(specs),
     connection,
     problem,
     settings,

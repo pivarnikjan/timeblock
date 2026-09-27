@@ -91,3 +91,24 @@ export function textOn(hex: string): string {
   const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return luminance > 0.45 ? '#1f1f1f' : '#ffffff';
 }
+
+/**
+ * Colours for time windows (Learning, Work…) that have not been given one in
+ * Settings, by position. Chosen from Google's palette but away from the three
+ * block colours (Blueberry, Peacock, Banana), so a window band never looks
+ * like a block.
+ */
+export const WINDOW_PALETTE = ['#33B679', '#F4511E', '#8E24AA', '#E67C73', '#0B8043', '#795548'] as const;
+
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/** A window's band colour: its own if set and valid, else the palette colour for its position. */
+export function windowColor(color: string | null | undefined, index: number): string {
+  if (color && HEX.test(color)) return color;
+  return WINDOW_PALETTE[((index % WINDOW_PALETTE.length) + WINDOW_PALETTE.length) % WINDOW_PALETTE.length];
+}
+
+/** `#rrggbb` from a form, or null for anything else (the palette then applies). */
+export function parseHexColor(value: unknown): string | null {
+  return typeof value === 'string' && HEX.test(value.trim()) ? value.trim().toLowerCase() : null;
+}

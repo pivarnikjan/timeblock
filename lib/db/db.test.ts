@@ -105,4 +105,14 @@ describe('sqlite-proxy bridge over node:sqlite', () => {
     const back = await db.select().from(blocks).where(eq(blocks.pinned, true));
     expect(back.map((b) => b.id)).toEqual([moved.id]);
   });
+
+  it('opens the Calendar in Week and leaves window colours to the palette', async () => {
+    const { db } = testDb();
+
+    const [row] = await db.select().from(settings);
+    const windows = await db.select().from(timeWindows);
+
+    expect(row.calendarView).toBe('week');
+    expect(windows.every((w) => w.color === null)).toBe(true);
+  });
 });

@@ -7,12 +7,15 @@ import {
   updateDayShapeAction,
   updateWindowAction,
 } from '@/app/actions/settings';
-import { restoreEventsAction, updateCalendarSettingsAction } from '@/app/actions/calendar';
+import { restoreEventsAction, toggleCalendarAction, updateCalendarSettingsAction } from '@/app/actions/calendar';
+import { ToggleForm } from '@/components/calendar/toggle';
 import { CsvImportForm } from '@/components/csv-import-form';
+import { windowColor, WINDOW_PALETTE } from '@/lib/calendar/colors';
 import { parseFilters } from '@/lib/calendar/filters';
 import { VIEW_LABEL, VIEWS } from '@/lib/calendar/views';
 import type { Settings, TimeWindow } from '@/lib/db/schema';
 import { listWindows } from '@/lib/repo/windows';
+import { listCalendars, type CalendarSummary } from '@/lib/google/calendar';
 import { connectionState } from '@/lib/google/client';
 import { redirectUri } from '@/lib/google/credentials';
 import { getSettings } from '@/lib/repo/settings';
@@ -68,6 +71,7 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
   const params = await searchParams;
   const [settings, windows] = await Promise.all([getSettings(), listWindows()]);
   const connection = connectionState();
+  const calendars = connection.status === 'connected' ? await readCalendars(settings.targetCalendarId) : null;
 
   const error = typeof params.error === 'string' ? params.error : null;
   const reason = typeof params.reason === 'string' ? params.reason : null;
@@ -224,10 +228,12 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
         </form>
       </Card>
 
-      <CalendarSettings settings={settings} />
+      <CalendarSettings settings={settings} calendars={calendars} />
 
       <Card>
-        <h2 className="text-sm font-medium">Time windows</h2>
+        <h2 id="windows" className="text-sm font-medium">
+          Time windows
+        </h2>
         <p className="mt-1 text-xs text-muted">
           Work is only scheduled inside its window. A task uses its own window, else the nearest one set on a goal
           above it, else the default below. Set &ldquo;Learning&rdquo; once on a yearly goal and every module under it
@@ -235,12 +241,13 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
         </p>
 
         <div className="mt-4 space-y-3">
-          {windows.map((w) => (
-            <WindowRow key={w.id} window={w} />
+          {windows.map((w, i) => (
+            <WindowRow key={w.id} window={w} color={windowColor(w.color, i)} />
           ))}
         </div>
 
-        <form action={createWindowAction} className="mt-4 grid items-end gap-3 border-t border-border pt-4 sm:grid-cols-[2fr_1fr_1fr_3fr_auto]">
+        <form action={createWindowAction} className="mt-4 grid items-end gap-3 border-t border-border pt-4 sm:grid-cols-[auto_2fr_1fr_1fr_3fr_auto]">
+          <ColorField defaultValue={WINDOW_PALETTE[windows.length % WINDOW_PALETTE.length]} />
           <Field label="New window">
             <Input name="name" required placeholder="e.g. Deep work" />
           </Field>
@@ -306,11 +313,27 @@ function Weekdays({ selected }: { selected: string }) {
   );
 }
 
-function WindowRow({ window: w }: { window: TimeWindow }) {
+/** The band colour a window gets on the Calendar. */
+function ColorField({ defaultValue }: { defaultValue: string }) {
+  return (
+    <Field label="Colour">
+      <input
+        type="color"
+        name="color"
+        defaultValue={defaultValue}
+        className="h-[34px] w-12 cursor-pointer rounded-md border border-border bg-background p-0.5"
+        title="Band colour on the Calendar"
+      />
+    </Field>
+  );
+}
+
+function WindowRow({ window: w, color }: { window: TimeWindow; color: string }) {
   return (
     <div className="flex flex-wrap items-end gap-3">
-      <form action={updateWindowAction} className="grid flex-1 items-end gap-3 sm:grid-cols-[2fr_1fr_1fr_3fr_auto]">
+      <form action={updateWindowAction} className="grid flex-1 items-end gap-3 sm:grid-cols-[auto_2fr_1fr_1fr_3fr_auto]">
         <input type="hidden" name="id" value={w.id} />
+        <ColorField defaultValue={color} />
         <Field label="Name">
           <Input name="name" required defaultValue={w.name} />
         </Field>
@@ -333,9 +356,20 @@ function WindowRow({ window: w }: { window: TimeWindow }) {
   );
 }
 
-/** What the Calendar screen shows by default, and the events hidden from it. */
-function CalendarSettings({ settings }: { settings: Settings }) {
-  const hidden = Object.entries(parseFilters(settings.calendarFilters).hiddenEvents);
+/** Google calendars for the "shown on the Calendar" list; null when they cannot be read right now. */
+async function readCalendars(own: string | null): Promise<CalendarSummary[] | null> {
+  try {
+    // TimeBlock's own calendar is drawn from its local blocks, so it is not offered here.
+    return (await listCalendars()).filter((c) => c.id !== own);
+  } catch {
+    return null;
+  }
+}
+
+/** What the Calendar screen shows by default: view, hours, Google calendars, and the events hidden from it. */
+function CalendarSettings({ settings, calendars }: { settings: Settings; calendars: CalendarSummary[] | null }) {
+  const filters = parseFilters(settings.calendarFilters);
+  const hidden = Object.entries(filters.hiddenEvents);
   return (
     <Card>
       <h2 id="calendar" className="text-sm font-medium">
@@ -351,7 +385,7 @@ function CalendarSettings({ settings }: { settings: Settings }) {
         <Field label="Show until">
           <Input name="calendarEnd" type="time" defaultValue={settings.calendarEnd} required />
         </Field>
-        <Field label="Open in view">
+        <Field label="Default view">
           <select
             name="calendarView"
             defaultValue={settings.calendarView}
@@ -370,6 +404,31 @@ function CalendarSettings({ settings }: { settings: Settings }) {
           </Button>
         </div>
       </form>
+
+      <div className="mt-4 border-t border-border pt-4">
+        <h3 className="text-xs font-medium text-muted">Google calendars shown on the Calendar</h3>
+        {calendars === null ? (
+          <p className="mt-1 text-xs text-muted">Connect Google Calendar above to choose which calendars appear.</p>
+        ) : calendars.length === 0 ? (
+          <p className="mt-1 text-xs text-muted">No calendars found in this Google account.</p>
+        ) : (
+          <ul className="mt-2 grid gap-1.5 text-sm sm:grid-cols-2">
+            {calendars.map((cal) => (
+              <li key={cal.id}>
+                <ToggleForm
+                  action={toggleCalendarAction}
+                  checked={!filters.hiddenCalendars.includes(cal.id)}
+                  fields={{ calendarId: cal.id }}
+                  color={cal.color}
+                  label={<span className="truncate">{cal.summary}</span>}
+                  title={cal.summary}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-1 text-xs text-muted">Unticked calendars are left off the Calendar; planning still avoids their busy time.</p>
+      </div>
 
       <div className="mt-4 border-t border-border pt-4">
         <h3 className="text-xs font-medium text-muted">Hidden events ({hidden.length})</h3>

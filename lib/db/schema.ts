@@ -17,6 +17,8 @@ export const timeWindows = sqliteTable('time_windows', {
   /** ISO weekdays the window applies on, comma separated: 1 = Monday … 7 = Sunday. */
   weekdays: text('weekdays').notNull().default('1,2,3,4,5'),
   sortOrder: integer('sort_order').notNull().default(0),
+  /** Band colour on the Calendar, `#rrggbb`; null = the palette colour for its position. */
+  color: text('color'),
 });
 
 /**
@@ -149,7 +151,7 @@ export const settings = sqliteTable('settings', {
   calendarStart: text('calendar_start').notNull().default('05:00'),
   calendarEnd: text('calendar_end').notNull().default('00:00'),
   /** View the Calendar opens in: day, 3days, workweek, week, month. */
-  calendarView: text('calendar_view').notNull().default('day'),
+  calendarView: text('calendar_view').notNull().default('week'),
   /** Greyed-out calendars and events, and per-view "multi-day only" — JSON, see lib/calendar/filters.ts. */
   calendarFilters: text('calendar_filters').notNull().default('{}'),
   updatedAt: text('updated_at').notNull().default(now),

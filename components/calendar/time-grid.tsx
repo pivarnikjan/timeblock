@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { DateTime } from 'luxon';
 import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
+import { textOn } from '@/lib/calendar/colors';
 import { layoutColumns, layoutLanes } from '@/lib/calendar/layout';
 import { DraggableBlock } from './draggable-block';
 import { chipStyle, HideToggle, PlanLink } from './event-chip';
@@ -169,21 +170,8 @@ function DayColumn({
         <div key={m} className="absolute inset-x-0 border-t border-border/70" style={{ top: (m - startMin) * PX_PER_MIN }} />
       ))}
 
-      {/* Time windows (Learning, Work…) as faint bands */}
-      {(data.bands[day] ?? []).map((band) => {
-        const top = Math.max(0, toMin(band.start)) * PX_PER_MIN;
-        const bottom = Math.min(endMin - startMin, toMin(band.end)) * PX_PER_MIN;
-        if (bottom <= top) return null;
-        return (
-          <div
-            key={band.name}
-            className="absolute inset-x-0 border-y border-dashed border-accent/20 bg-accent/[0.04]"
-            style={{ top, height: bottom - top }}
-          >
-            <span className="absolute right-1 top-0.5 text-[9px] uppercase tracking-wide text-accent/60">{band.name}</span>
-          </div>
-        );
-      })}
+      {/* Time windows (Learning, Work…): behind the blocks unless brought to the front */}
+      {!data.filters.windowsInFront && <WindowBands data={data} day={day} front={false} />}
 
       {layoutColumns(pieces).map(({ item, start, end, col, cols }) => {
         const { style, className } = chipStyle(item);
@@ -236,6 +224,8 @@ function DayColumn({
         );
       })}
 
+      {data.filters.windowsInFront && <WindowBands data={data} day={day} front />}
+
       {nowTop !== null && nowTop >= 0 && nowTop <= endMin - startMin && (
         <div className="pointer-events-none absolute inset-x-0 z-10" style={{ top: nowTop * PX_PER_MIN }}>
           <div className="relative h-0.5 bg-[#ea4335]">
@@ -244,5 +234,59 @@ function DayColumn({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A day's time windows as tinted bands in each window's colour, with a stripe
+ * down the left edge. The name appears once per view, on the first day a
+ * window opens. In front, the bands sit over the blocks (clicks and drags pass
+ * through) and the name becomes a solid label that nothing can cover.
+ */
+function WindowBands({ data, day, front }: { data: CalendarData; day: string; front: boolean }) {
+  const { startMin, endMin } = data.hours;
+  const dayStart = DateTime.fromISO(day, { zone: data.zone }).startOf('day');
+  const toMin = (dt: DateTime) => dt.diff(dayStart, 'minutes').minutes - startMin;
+
+  return (
+    <>
+      {(data.bands[day] ?? []).map((band) => {
+        const top = Math.max(0, toMin(band.start)) * PX_PER_MIN;
+        const bottom = Math.min(endMin - startMin, toMin(band.end)) * PX_PER_MIN;
+        if (bottom <= top) return null;
+        const time = `${band.start.toFormat('HH:mm')}–${band.end.toFormat('HH:mm')}`;
+        return (
+          <div
+            key={band.id}
+            className={`pointer-events-none absolute inset-x-0 overflow-hidden ${front ? 'z-10 border-2' : 'border-y border-dashed'}`}
+            style={{
+              top,
+              height: bottom - top,
+              backgroundColor: `${band.color}${front ? '24' : '14'}`,
+              borderColor: front ? band.color : `${band.color}66`,
+              borderLeft: `3px solid ${band.color}`,
+            }}
+            title={`${band.name} ${time}`}
+          >
+            {band.labelled &&
+              (front ? (
+                <span
+                  className="absolute left-0 top-0 max-w-full truncate rounded-br px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide shadow-sm"
+                  style={{ backgroundColor: band.color, color: textOn(band.color) }}
+                >
+                  {band.name}
+                </span>
+              ) : (
+                <span
+                  className="absolute right-1 top-0.5 max-w-full truncate text-[9px] font-semibold uppercase tracking-wide"
+                  style={{ color: band.color }}
+                >
+                  {band.name}
+                </span>
+              ))}
+          </div>
+        );
+      })}
+    </>
   );
 }

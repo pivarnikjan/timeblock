@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { calendarColor, energyColor, eventColor, textOn } from './colors';
+import { windowBands, windowLegend } from './bands';
+import { calendarColor, energyColor, eventColor, parseHexColor, textOn, WINDOW_PALETTE, windowColor } from './colors';
 import { eventKey, isHidden, parseFilters } from './filters';
 import { layoutColumns, layoutLanes } from './layout';
 import { calendarRange, parseView, visibleHours } from './views';
@@ -154,5 +155,43 @@ describe('hiding', () => {
   it('survives malformed stored filters', () => {
     expect(parseFilters('not json')).toMatchObject({ hiddenCalendars: [], hidePlan: false });
     expect(parseFilters('{"multiDayOnly":["month","nope"]}').multiDayOnly).toEqual(['month']);
+  });
+});
+
+describe('time windows on the calendar', () => {
+  const learning = { id: 1, name: 'Learning', start: '10:30', end: '14:00', weekdays: [1, 2, 3, 4, 5], color: null };
+  const work = { id: 2, name: 'Work', start: '14:00', end: '17:30', weekdays: [1, 2, 3, 4, 5], color: '#123abc' };
+  const training = { id: 3, name: 'Training', start: '08:15', end: '10:00', weekdays: [6], color: null };
+  const WEEK = ['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'];
+
+  it('uses a chosen colour, else a distinct palette colour by position', () => {
+    expect(windowColor('#123abc', 0)).toBe('#123abc');
+    expect(windowColor(null, 0)).toBe(WINDOW_PALETTE[0]);
+    expect(windowColor('not a colour', 1)).toBe(WINDOW_PALETTE[1]);
+    expect(windowColor(null, WINDOW_PALETTE.length)).toBe(WINDOW_PALETTE[0]);
+    expect((WINDOW_PALETTE as readonly string[]).includes(energyColor('deep'))).toBe(false); // never mistaken for a block
+    expect(windowLegend([learning, work]).map((w) => w.color)).toEqual([WINDOW_PALETTE[0], '#123abc']);
+  });
+
+  it('accepts only #rrggbb from the colour picker', () => {
+    expect(parseHexColor('#33B679')).toBe('#33b679');
+    expect(parseHexColor('red')).toBeNull();
+    expect(parseHexColor(null)).toBeNull();
+  });
+
+  it('names each window once per view, on the first day it opens', () => {
+    const bands = windowBands(WEEK, [learning, work, training], TZ);
+    const labelled = Object.entries(bands).flatMap(([day, list]) => list.filter((b) => b.labelled).map((b) => `${day} ${b.name}`));
+
+    expect(labelled).toEqual(['2026-09-28 Learning', '2026-09-28 Work', '2026-10-03 Training']);
+    expect(bands['2026-09-29'].map((b) => b.name)).toEqual(['Learning', 'Work']);
+    expect(bands['2026-10-04']).toEqual([]);
+    expect(bands['2026-09-29'][0].start.toFormat('HH:mm')).toBe('10:30');
+  });
+
+  it('keeps windows behind the blocks unless brought to the front', () => {
+    expect(parseFilters('{}').windowsInFront).toBe(false);
+    expect(parseFilters(JSON.stringify({ windowsInFront: true })).windowsInFront).toBe(true);
+    expect(parseFilters(JSON.stringify({ windowsInFront: 'yes' })).windowsInFront).toBe(false);
   });
 });
