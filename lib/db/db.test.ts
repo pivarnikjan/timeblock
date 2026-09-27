@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { blocks, horizons, settings, tasks, timeWindows } from './schema';
+import { blocks, eventMarks, horizons, settings, tasks, timeWindows } from './schema';
 import { testDb } from './testing';
 
 describe('sqlite-proxy bridge over node:sqlite', () => {
@@ -114,5 +114,14 @@ describe('sqlite-proxy bridge over node:sqlite', () => {
 
     expect(row.calendarView).toBe('week');
     expect(windows.every((w) => w.color === null)).toBe(true);
+  });
+
+  it('keeps event marks per series key, unmarked by default', async () => {
+    const { db } = testDb();
+
+    await db.insert(eventMarks).values({ key: 'primary|focus', title: 'Focus', placeholder: true });
+    const [row] = await db.select().from(eventMarks);
+
+    expect(row).toMatchObject({ key: 'primary|focus', title: 'Focus', important: false, placeholder: true });
   });
 });

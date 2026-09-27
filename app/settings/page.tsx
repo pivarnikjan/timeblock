@@ -435,7 +435,7 @@ function CalendarSettings({ settings, calendars }: { settings: Settings; calenda
         <h3 className="text-xs font-medium text-muted">Hidden events ({hidden.length})</h3>
         {hidden.length === 0 ? (
           <p className="mt-1 text-xs text-muted">
-            None. In the Calendar, point at an event and untick its box to hide it.
+            None. In the Calendar, click an event and untick “Show on the calendar” to hide it.
           </p>
         ) : (
           <>

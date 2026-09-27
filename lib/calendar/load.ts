@@ -4,6 +4,7 @@ import type { Settings } from '@/lib/db/schema';
 import { listCalendars, listRangeEvents, type CalendarEvent, type CalendarSummary } from '@/lib/google/calendar';
 import { connectionState, isMissingScopeError, MISSING_SCOPE_HELP, type ConnectionState } from '@/lib/google/client';
 import * as blockRepo from '@/lib/repo/blocks';
+import { listMarks } from '@/lib/repo/event-marks';
 import { getSettings, getCalendarFilters } from '@/lib/repo/settings';
 import { listWindows, toSpec } from '@/lib/repo/windows';
 import { nowIn } from '@/lib/time/periods';
@@ -38,6 +39,22 @@ export interface CalendarItem {
   movable: boolean;
   /** Placed by hand; planning works around it. */
   pinned: boolean;
+  /** Google's event id (events only), for deleting it. */
+  eventId: string | null;
+  /** The calendar it is in, as Google names it (events only). */
+  calendarName: string | null;
+  /** Its calendar can be edited, so the event can be deleted here. */
+  writable: boolean;
+  /** One occurrence of a repeating event. */
+  recurring: boolean;
+  htmlLink: string | null;
+  /** Marked important: always in Month, marked ★. */
+  important: boolean;
+  /** Marked as a placeholder: planning may schedule work during it. */
+  placeholder: boolean;
+  /** Blocks only: draft / synced / done, and the tasks inside. */
+  blockState: 'draft' | 'synced' | 'done' | null;
+  segments: { title: string; minutes: number; done: boolean }[];
 }
 
 export interface CalendarData {
@@ -50,6 +67,8 @@ export interface CalendarData {
   items: CalendarItem[];
   /** The raw Google events, so the day planner can reuse this read. */
   events: CalendarEvent[];
+  /** Keys of events marked as placeholders — not busy when planning. */
+  placeholders: Set<string>;
   calendars: (CalendarSummary & { hidden: boolean })[];
   filters: CalendarFilters;
   bands: Record<string, WindowBand[]>;
@@ -58,6 +77,8 @@ export interface CalendarData {
   connection: ConnectionState;
   problem: string | null;
   settings: Settings;
+  /** The item open in the side panel (`?item=`), if any. */
+  selected: string | null;
 }
 
 function isMultiDay(start: DateTime, end: DateTime, allDay: boolean): boolean {
@@ -85,7 +106,7 @@ async function loadEvents(
   }
 }
 
-export async function loadCalendarView(view: CalendarView, anchor: string): Promise<CalendarData> {
+export async function loadCalendarView(view: CalendarView, anchor: string, selected: string | null = null): Promise<CalendarData> {
   const [settings, filters, windows] = await Promise.all([getSettings(), getCalendarFilters(), listWindows()]);
   const zone = settings.timezone;
   const range = calendarRange(view, anchor, zone);
@@ -94,16 +115,17 @@ export async function loadCalendarView(view: CalendarView, anchor: string): Prom
   const afterLast = DateTime.fromISO(last, { zone }).plus({ days: 1 }).toISODate()!;
 
   const connection = connectionState();
-  const [{ events, calendars, problem }, blocks] = await Promise.all([
+  const [{ events, calendars, problem }, blocks, marks] = await Promise.all([
     loadEvents(first, afterLast, zone, connection),
     blockRepo.listForRange(first, last),
+    listMarks(),
   ]);
 
   // TimeBlock's own calendar is represented by its local blocks (which also
   // carry drafts), so its Google copies and its checkbox are left out.
   const own = settings.targetCalendarId;
   const shownCalendars = calendars.filter((c) => c.id !== own);
-  const background = new Map(calendars.map((c) => [c.id, c.background]));
+  const calendarById = new Map(calendars.map((c) => [c.id, c]));
 
   const items: CalendarItem[] = [];
 
@@ -113,8 +135,11 @@ export async function loadCalendarView(view: CalendarView, anchor: string): Prom
     const end = DateTime.fromISO(e.end).setZone(zone);
     const multiDay = isMultiDay(start, end, e.allDay);
     const hideKey = eventKey(e);
-    if (isHidden({ calendarId: e.calendarId, key: hideKey, isBlock: false, multiDay }, filters, view)) continue;
-    const color = eventColor(e.colorId, background.get(e.calendarId));
+    const mark = marks.get(hideKey);
+    const important = mark?.important ?? false;
+    if (isHidden({ calendarId: e.calendarId, key: hideKey, isBlock: false, multiDay, important }, filters, view)) continue;
+    const calendar = calendarById.get(e.calendarId);
+    const color = eventColor(e.colorId, calendar?.background);
     items.push({
       id: `${e.calendarId}:${e.id}`,
       kind: 'event',
@@ -133,6 +158,15 @@ export async function loadCalendarView(view: CalendarView, anchor: string): Prom
       blockId: null,
       movable: false,
       pinned: false,
+      eventId: e.id,
+      calendarName: calendar?.summary ?? null,
+      writable: calendar?.writable ?? false,
+      recurring: e.recurring,
+      htmlLink: e.htmlLink,
+      important,
+      placeholder: mark?.placeholder ?? false,
+      blockState: null,
+      segments: [],
     });
   }
 
@@ -159,6 +193,15 @@ export async function loadCalendarView(view: CalendarView, anchor: string): Prom
       blockId: b.id,
       movable: b.state !== 'done' && !blockRepo.isLocked(b),
       pinned: b.pinned,
+      eventId: null,
+      calendarName: null,
+      writable: false,
+      recurring: false,
+      htmlLink: null,
+      important: false,
+      placeholder: false,
+      blockState: b.state === 'cancelled' ? 'done' : b.state,
+      segments: b.segments.map((s) => ({ title: s.task.title, minutes: s.minutes, done: s.doneAt !== null })),
     });
   }
 
@@ -176,6 +219,7 @@ export async function loadCalendarView(view: CalendarView, anchor: string): Prom
     hours: visibleHours(settings.calendarStart, settings.calendarEnd),
     items,
     events,
+    placeholders: new Set([...marks.values()].filter((m) => m.placeholder).map((m) => m.key)),
     calendars: shownCalendars.map((c) => ({ ...c, hidden: filters.hiddenCalendars.includes(c.id) })),
     filters,
     bands,
@@ -183,5 +227,6 @@ export async function loadCalendarView(view: CalendarView, anchor: string): Prom
     connection,
     problem,
     settings,
+    selected,
   };
 }

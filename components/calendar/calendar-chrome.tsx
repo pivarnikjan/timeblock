@@ -161,7 +161,7 @@ export function FilterPanel({ data }: { data: CalendarData }) {
         </h2>
         {hidden.length === 0 ? (
           <p className="text-xs text-muted">
-            Point at an event and untick its box to hide it. A repeating event hides every time it repeats.
+            Click an event and untick “Show on the calendar” to hide it. A repeating event hides every time it repeats.
           </p>
         ) : (
           <>

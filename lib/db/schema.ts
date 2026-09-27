@@ -150,10 +150,26 @@ export const settings = sqliteTable('settings', {
   /** Hours the Calendar screen shows, local HH:mm. An end of 00:00 means midnight. */
   calendarStart: text('calendar_start').notNull().default('05:00'),
   calendarEnd: text('calendar_end').notNull().default('00:00'),
-  /** View the Calendar opens in: day, 3days, workweek, week, month. */
+  /** View the Calendar opens in: day, workweek, week, month. A retired view (3days) falls back to week. */
   calendarView: text('calendar_view').notNull().default('week'),
   /** Greyed-out calendars and events, and per-view "multi-day only" — JSON, see lib/calendar/filters.ts. */
   calendarFilters: text('calendar_filters').notNull().default('{}'),
+  updatedAt: text('updated_at').notNull().default(now),
+});
+
+/**
+ * What the user said about a Google event, kept locally so it works for
+ * read-only calendars too. Keyed like hiding (`calendarId|seriesId`), so a mark
+ * on a repeating event covers every repeat.
+ */
+export const eventMarks = sqliteTable('event_marks', {
+  key: text('key').primaryKey(),
+  /** The event's title when marked, for listing marks without reading Google. */
+  title: text('title').notNull().default(''),
+  /** Always shown in Month view (even with "only multi-day events"), marked ★. */
+  important: integer('important', { mode: 'boolean' }).notNull().default(false),
+  /** Not busy for planning: work may be scheduled during it. */
+  placeholder: integer('placeholder', { mode: 'boolean' }).notNull().default(false),
   updatedAt: text('updated_at').notNull().default(now),
 });
 
@@ -186,5 +202,6 @@ export type Block = typeof blocks.$inferSelect;
 export type NewBlock = typeof blocks.$inferInsert;
 export type BlockSegment = typeof blockSegments.$inferSelect;
 export type Settings = typeof settings.$inferSelect;
+export type EventMark = typeof eventMarks.$inferSelect;
 export type RitualKind = (typeof RITUALS)[number];
 export type Energy = (typeof ENERGY)[number];

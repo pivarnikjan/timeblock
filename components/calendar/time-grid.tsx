@@ -4,7 +4,7 @@ import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
 import { textOn } from '@/lib/calendar/colors';
 import { layoutColumns, layoutLanes } from '@/lib/calendar/layout';
 import { DraggableBlock } from './draggable-block';
-import { chipStyle, HideToggle, PlanLink } from './event-chip';
+import { chipStyle, ItemLink, itemHref } from './event-chip';
 import { ScrollArea } from './scroll-area';
 
 /** 48px an hour, like Google Calendar's default density. */
@@ -82,9 +82,11 @@ export function TimeGrid({ data }: { data: CalendarData }) {
           {lanes.map(({ item, lane, col, span, continuesBefore, continuesAfter }) => {
             const { style, className } = chipStyle(item);
             return (
-              <div
+              <ItemLink
                 key={item.id}
-                className={`group absolute flex items-center gap-1 overflow-hidden px-1.5 text-xs ${className} ${
+                data={data}
+                item={item}
+                className={`absolute flex items-center gap-1 overflow-hidden px-1.5 text-xs ${className} ${
                   continuesBefore ? 'rounded-l-none' : 'rounded-l'
                 } ${continuesAfter ? 'rounded-r-none' : 'rounded-r'}`}
                 style={{
@@ -94,15 +96,13 @@ export function TimeGrid({ data }: { data: CalendarData }) {
                   left: `calc(${(col / days.length) * 100}% + 2px)`,
                   width: `calc(${(span / days.length) * 100}% - 4px)`,
                 }}
-                title={item.title}
               >
-                <span className="min-w-0 flex-1 truncate font-medium">
+                <span className="min-w-0 flex-1 truncate font-medium" title={item.title}>
                   {continuesBefore && '◂ '}
                   {item.title}
                   {continuesAfter && ' ▸'}
                 </span>
-                <HideToggle item={item} />
-              </div>
+              </ItemLink>
             );
           })}
         </div>
@@ -177,7 +177,10 @@ function DayColumn({
         const { style, className } = chipStyle(item);
         const heightPx = (end - start) * PX_PER_MIN;
         const time = `${item.start.toFormat('HH:mm')} – ${item.end.toFormat('HH:mm')}`;
-        const chipClass = `group absolute overflow-hidden rounded px-1.5 py-0.5 text-xs leading-tight shadow-sm ${className}`;
+        const selected = data.selected === item.id;
+        const chipClass = `absolute overflow-hidden rounded px-1.5 py-0.5 text-xs leading-tight shadow-sm ${className} ${
+          selected ? 'z-[5] ring-2 ring-foreground ring-offset-1 ring-offset-surface' : ''
+        }`;
         const chipStyleProps = {
           ...style,
           top: start * PX_PER_MIN + 1,
@@ -185,17 +188,15 @@ function DayColumn({
           left: `calc(${(col / cols) * 100}% + 1px)`,
           width: `calc(${100 / cols}% - 3px)`,
         };
+        const note = item.draft ? ' · draft' : item.placeholder ? ' · placeholder' : '';
         const content = (
-          <div className="flex items-start gap-1">
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium" title={`${item.title} · ${time}`}>
-                {item.pinned && <span title="Placed by hand — planning works around it">📌 </span>}
-                {item.title}
-              </span>
-              {heightPx >= 30 && <span className="block truncate opacity-80">{time}{item.draft ? ' · draft' : ''}</span>}
+          <span className="block min-w-0">
+            <span className="block truncate font-medium" title={`${item.title} · ${time}${note}`}>
+              {item.pinned && <span title="Placed by hand — planning works around it">📌 </span>}
+              {item.title}
             </span>
-            <HideToggle item={item} />
-          </div>
+            {heightPx >= 30 && <span className="block truncate opacity-80">{time}{note}</span>}
+          </span>
         );
 
         // Blocks that start and end on this day can be dragged; anything else stays a link.
@@ -204,7 +205,7 @@ function DayColumn({
             <DraggableBlock
               key={`${item.id}@${day}`}
               blockId={item.blockId}
-              href={`/calendar?view=day&date=${item.planDate}`}
+              href={itemHref(data, item)}
               className={chipClass}
               style={chipStyleProps}
               dayIndex={dayIndex}
@@ -218,9 +219,9 @@ function DayColumn({
           );
         }
         return (
-          <PlanLink key={`${item.id}@${day}`} item={item} className={chipClass} style={chipStyleProps}>
+          <ItemLink key={`${item.id}@${day}`} data={data} item={item} className={chipClass} style={chipStyleProps}>
             {content}
-          </PlanLink>
+          </ItemLink>
         );
       })}
 

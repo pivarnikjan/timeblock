@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { DateTime } from 'luxon';
 import { CalendarHeader, FilterPanel } from '@/components/calendar/calendar-chrome';
+import { EventPanel } from '@/components/calendar/event-panel';
 import { MonthGrid } from '@/components/calendar/month-grid';
 import { PlanCalendarBar } from '@/components/plan-calendar-bar';
 import { TimeGrid } from '@/components/calendar/time-grid';
@@ -20,11 +21,17 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
   const settings = await getSettings();
   const zone = settings.timezone;
 
-  const view = parseView(params.view) ?? parseView(settings.calendarView) ?? 'day';
+  const view = parseView(params.view) ?? parseView(settings.calendarView) ?? 'week';
   const asked = typeof params.date === 'string' ? params.date : null;
   const anchor = asked && DateTime.fromISO(asked, { zone }).isValid ? asked : nowIn(zone).toISODate()!;
 
-  const [data, draftDates] = await Promise.all([loadCalendarView(view, anchor), blockRepo.draftDatesFrom(nowIn(zone).toISODate()!)]);
+  const askedItem = typeof params.item === 'string' ? params.item : null;
+  const [data, draftDates] = await Promise.all([
+    loadCalendarView(view, anchor, askedItem),
+    blockRepo.draftDatesFrom(nowIn(zone).toISODate()!),
+  ]);
+  // The clicked item, if it is still there (a deleted or hidden one simply closes the panel).
+  const selected = data.items.find((i) => i.id === askedItem) ?? null;
   const drafts = {
     blocks: draftDates.reduce((n, d) => n + d.blocks, 0),
     days: draftDates.length,
@@ -35,7 +42,7 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
   // The one-day view is where a day is planned: reuse the events just read.
   const day =
     view === 'day'
-      ? await loadDay(anchor, { events: data.events, busy: busySpans(data.events), problem: data.problem })
+      ? await loadDay(anchor, { events: data.events, busy: busySpans(data.events, data.placeholders), problem: data.problem })
       : null;
 
   return (
@@ -59,9 +66,10 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
         </p>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[13rem_minmax(0,1fr)]">
+      <div className={`grid gap-5 ${selected ? 'lg:grid-cols-[13rem_minmax(0,1fr)_19rem]' : 'lg:grid-cols-[13rem_minmax(0,1fr)]'}`}>
         <FilterPanel data={data} />
         {view === 'month' ? <MonthGrid data={data} /> : <TimeGrid data={data} />}
+        {selected && <EventPanel key={selected.id} data={data} item={selected} />}
       </div>
 
       {day ? (

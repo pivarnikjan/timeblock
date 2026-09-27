@@ -73,7 +73,6 @@ Calendar, with TimeBlock's plan drawn in:
 | View | Shows |
 | --- | --- |
 | **Today** | One day — with the planning tools underneath: review yesterday, generate, commit, tick blocks off |
-| **3 days** | The chosen day and the next two |
 | **Work week** | Monday – Friday |
 | **Week** | Monday – Sunday |
 | **Month** | Whole weeks; multi-day events as bars across the days they cover, other events as coloured dots with their start time |
@@ -96,6 +95,27 @@ defaults (Learning green, Work orange) that never match a block's colour. A
 default follows the order windows were created in, so adding an earlier window
 never recolours the others.
 
+**Click anything for details.** Clicking an event or a block opens a panel
+beside the calendar (the grid stays where it is; **×** closes it):
+
+- **A Google event** shows when it is, its calendar, and whether it repeats,
+  with a link to open it in Google Calendar, and:
+  - **★ Important in Month view** — always shown in Month, starred and in bold,
+    even with *Only multi-day events* on.
+  - **Placeholder** — time held, not taken: *Plan calendar* and *Generate the
+    day* may schedule work during it. Drawn hatched.
+  - **Show on the calendar** — untick to hide it.
+  - **Delete from Google Calendar**, after a confirmation. For a repeating event
+    only this occurrence is deleted. Read-only calendars (holidays, calendars
+    shared with you to view) cannot be deleted from.
+
+  The three checkboxes are remembered on this computer, per event — for a
+  repeating event, for every repeat — so they work on read-only calendars too.
+- **A TimeBlock block** shows its tasks and minutes, whether it is a draft or in
+  Google, and whether you pinned it, with **Tick off in the day →**, **Unpin**,
+  and **Delete block** (its Google event too, if committed; its tasks are
+  planned again next time). A block with ticked-off work stays as history.
+
 **Colours are Google's.** An event uses its own colour if it has one, else its
 calendar's — mapped to the palette Google Calendar's web app shows (the API
 still reports an older one). TimeBlock's blocks use the colours they get once
@@ -109,14 +129,14 @@ so a busy month becomes readable:
   to hide it. It lives in Settings because it rarely changes — the left panel
   only shows how many are on. Planning still avoids a hidden calendar's busy time.
 - **TimeBlock plan** (left panel): untick to hide TimeBlock's own blocks.
-- **The checkbox on an event** appears when you point at it: untick to hide the
-  event. A repeating event hides every time it repeats (hide *Ranajky* once, and
-  every breakfast is gone).
+- **Show on the calendar** (click the event): untick to hide it. A repeating
+  event hides every time it repeats (hide *Ranajky* once, and every breakfast
+  is gone).
 - **Hidden events** (left panel, and Settings → Calendar) lists them, each with
   **show** to bring it back.
 - **Only multi-day events** (Month view only): shows only events that span
-  several days, to see trips, holidays and conferences at a glance. Views with
-  hours always show their timed events.
+  several days, to see trips, holidays and conferences at a glance — plus any
+  event marked **★ important**. Views with hours always show their timed events.
 
 ## How a day is planned
 

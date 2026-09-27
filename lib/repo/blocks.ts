@@ -177,6 +177,11 @@ export async function moveBlock(id: number, date: string, startsAt: string, ends
     .where(eq(blocks.id, id));
 }
 
+/** Removes a block and its task segments. */
+export async function deleteBlock(id: number): Promise<void> {
+  await deleteBlocksAndSegments([id]);
+}
+
 export async function setPinned(id: number, pinned: boolean): Promise<void> {
   await db().update(blocks).set({ pinned, updatedAt: new Date().toISOString() }).where(eq(blocks.id, id));
 }
