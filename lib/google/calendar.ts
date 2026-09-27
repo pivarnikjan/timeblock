@@ -3,7 +3,6 @@ import { DateTime } from 'luxon';
 import type { calendar_v3 } from 'googleapis';
 import { calendarColor } from '@/lib/calendar/colors';
 import { calendarApi } from './client';
-import type { BusySpan } from '@/lib/scheduler/day';
 
 /** Marks the events TimeBlock owns, so re-planning never touches a real meeting. */
 export const BLOCK_ID_KEY = 'tbBlockId';
@@ -25,6 +24,10 @@ export interface CalendarEvent {
   colorId: string | null;
   /** Set when TimeBlock created this event. */
   blockId: number | null;
+  /** One occurrence of a repeating event. */
+  recurring: boolean;
+  /** The event in Google Calendar's web app. */
+  htmlLink: string | null;
 }
 
 export interface CalendarSummary {
@@ -35,6 +38,8 @@ export interface CalendarSummary {
   color: string;
   /** The raw background the API reports (legacy palette), needed to colour its events. */
   background: string | null;
+  /** The account may change and delete its events (owner or writer, not a subscribed or shared-read calendar). */
+  writable: boolean;
 }
 
 export async function listCalendars(): Promise<CalendarSummary[]> {
@@ -48,6 +53,7 @@ export async function listCalendars(): Promise<CalendarSummary[]> {
       primary: item.primary === true,
       color: calendarColor(item.backgroundColor),
       background: item.backgroundColor ?? null,
+      writable: item.accessRole === 'owner' || item.accessRole === 'writer',
     }));
 }
 
@@ -79,6 +85,8 @@ function parseEvent(event: calendar_v3.Schema$Event, calendarId: string, zone: s
     declined,
     colorId: event.colorId ?? null,
     blockId: Number.isFinite(blockId) && blockId > 0 ? blockId : null,
+    recurring: Boolean(event.recurringEventId),
+    htmlLink: event.htmlLink ?? null,
   };
 }
 
@@ -132,13 +140,12 @@ export async function listDayEvents(date: string, zone: string): Promise<Calenda
   return listRangeEvents(date, next, zone);
 }
 
+export { busySpans } from '@/lib/calendar/busy';
+
 /**
- * The spans the scheduler must plan around: real commitments only.
- * TimeBlock's own blocks are excluded so re-planning a day does not treat
- * yesterday's proposal as an immovable meeting.
+ * Deletes one event from Google Calendar — for a repeating event, only this
+ * occurrence. Google refuses it on a calendar the account cannot edit.
  */
-export function busySpans(events: CalendarEvent[]): BusySpan[] {
-  return events
-    .filter((event) => event.busy && event.blockId === null)
-    .map((event) => ({ start: event.start, end: event.end }));
+export async function deleteCalendarEvent(calendarId: string, eventId: string): Promise<void> {
+  await calendarApi().events.delete({ calendarId, eventId });
 }

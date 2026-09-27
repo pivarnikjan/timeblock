@@ -17,6 +17,7 @@ import {
   type SequencePosition,
 } from '@/lib/hierarchy';
 import * as blockRepo from '@/lib/repo/blocks';
+import { placeholderKeys } from '@/lib/repo/event-marks';
 import { listAllHorizons } from '@/lib/repo/horizons';
 import { getSettings } from '@/lib/repo/settings';
 import { listAllTasks } from '@/lib/repo/tasks';
@@ -117,8 +118,8 @@ export async function loadCalendar(date: string, settings: Settings): Promise<Ca
   if (status === 'missing-scope') return { events: [], busy: [], problem: MISSING_SCOPE_HELP };
   if (status !== 'connected') return { events: [], busy: [], problem: null };
   try {
-    const events = await listDayEvents(date, settings.timezone);
-    return { events, busy: busySpans(events), problem: null };
+    const [events, placeholders] = await Promise.all([listDayEvents(date, settings.timezone), placeholderKeys()]);
+    return { events, busy: busySpans(events, placeholders), problem: null };
   } catch (error) {
     // Google's wording ("insufficient authentication scopes") does not say what to do.
     return { events: [], busy: [], problem: isMissingScopeError(error) ? MISSING_SCOPE_HELP : (error as Error).message };
@@ -217,6 +218,7 @@ async function loadRangeBusy(
   if (status !== 'connected') return { busy, problem: null };
 
   let events: CalendarEvent[];
+  const placeholders = await placeholderKeys();
   try {
     events = await listRangeEvents(from, toExclusive, settings.timezone);
   } catch (error) {
@@ -224,7 +226,7 @@ async function loadRangeBusy(
   }
 
   // A span is filed under every local date it touches; freeSlots clips it to each day's windows.
-  for (const span of busySpans(events)) {
+  for (const span of busySpans(events, placeholders)) {
     let day = DateTime.fromISO(span.start, { zone: settings.timezone }).startOf('day');
     const end = DateTime.fromISO(span.end, { zone: settings.timezone });
     while (day < end) {

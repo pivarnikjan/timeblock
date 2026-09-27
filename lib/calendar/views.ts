@@ -1,12 +1,11 @@
 import { DateTime } from 'luxon';
 
 /** The Calendar's views, in the order the switcher shows them. */
-export const VIEWS = ['day', '3days', 'workweek', 'week', 'month'] as const;
+export const VIEWS = ['day', 'workweek', 'week', 'month'] as const;
 export type CalendarView = (typeof VIEWS)[number];
 
 export const VIEW_LABEL: Record<CalendarView, string> = {
   day: 'Today',
-  '3days': '3 days',
   workweek: 'Work week',
   week: 'Week',
   month: 'Month',
@@ -53,10 +52,6 @@ export function calendarRange(view: CalendarView, anchor: string, zone: string):
   switch (view) {
     case 'day':
       return { view, anchor, days: [anchor], month: null, title: rangeTitle(a, a), prev: iso(a.minus({ days: 1 })), next: iso(a.plus({ days: 1 })) };
-    case '3days': {
-      const last = a.plus({ days: 2 });
-      return { view, anchor, days: span(a, 3), month: null, title: rangeTitle(a, last), prev: iso(a.minus({ days: 3 })), next: iso(a.plus({ days: 3 })) };
-    }
     case 'workweek':
     case 'week': {
       const monday = a.startOf('week');
@@ -102,4 +97,10 @@ export function visibleHours(start: string, end: string): { startMin: number; en
   let endMin = toMin(end);
   if (!Number.isFinite(endMin) || endMin <= startMin) endMin = 24 * 60;
   return { startMin, endMin };
+}
+
+/** A Calendar URL: a view on a date, optionally with one item open in the side panel. */
+export function calendarHref(view: CalendarView, date: string, item?: string | null): string {
+  const base = `/calendar?view=${view}&date=${date}`;
+  return item ? `${base}&item=${encodeURIComponent(item)}` : base;
 }

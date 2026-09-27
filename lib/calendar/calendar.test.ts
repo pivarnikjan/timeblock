@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { windowBands, windowLegend } from './bands';
+import { busySpans } from './busy';
 import { calendarColor, energyColor, eventColor, parseHexColor, textOn, WINDOW_PALETTE, windowColor, windowColors } from './colors';
 import { eventKey, isHidden, parseFilters } from './filters';
 import { layoutColumns, layoutLanes } from './layout';
-import { calendarRange, parseView, visibleHours } from './views';
+import { calendarHref, calendarRange, parseView, visibleHours } from './views';
 
 const TZ = 'Europe/Vienna';
 
 describe('views', () => {
-  it('covers one day, three days, the work week and the full week', () => {
+  it('covers one day, the work week and the full week, and no longer knows 3 days', () => {
+    expect(parseView('3days')).toBeNull();
     // Wed 30 Sep 2026
     expect(calendarRange('day', '2026-09-30', TZ).days).toEqual(['2026-09-30']);
-    expect(calendarRange('3days', '2026-09-30', TZ).days).toEqual(['2026-09-30', '2026-10-01', '2026-10-02']);
     expect(calendarRange('workweek', '2026-09-30', TZ).days).toEqual([
       '2026-09-28',
       '2026-09-29',
@@ -34,7 +35,6 @@ describe('views', () => {
 
   it('moves by the size of the view', () => {
     expect(calendarRange('day', '2026-09-30', TZ).next).toBe('2026-10-01');
-    expect(calendarRange('3days', '2026-09-30', TZ).next).toBe('2026-10-03');
     expect(calendarRange('week', '2026-09-30', TZ).prev).toBe('2026-09-23');
     expect(calendarRange('month', '2026-01-31', TZ).next).toBe('2026-02-01');
   });
@@ -42,7 +42,7 @@ describe('views', () => {
   it('titles ranges like Google does', () => {
     expect(calendarRange('day', '2026-09-30', TZ).title).toBe('Wednesday 30 September 2026');
     expect(calendarRange('week', '2026-09-30', TZ).title).toBe('28 Sep – 4 Oct 2026');
-    expect(calendarRange('3days', '2026-10-05', TZ).title).toBe('5 – 7 Oct 2026');
+    expect(calendarRange('workweek', '2026-10-05', TZ).title).toBe('5 – 9 Oct 2026');
   });
 
   it('reads visible hours, treating an end of 00:00 as midnight', () => {
@@ -154,6 +154,13 @@ describe('hiding', () => {
     expect(isHidden(event({}), stored, 'month')).toBe(true);
   });
 
+  it('keeps an important event in Month even when only multi-day events are shown', () => {
+    expect(isHidden(event({ important: true }), filters, 'month')).toBe(false);
+    expect(isHidden(event({ important: false }), filters, 'month')).toBe(true);
+    // Hiding still wins: important does not bring back a hidden calendar.
+    expect(isHidden(event({ important: true, calendarId: 'holidays' }), filters, 'month')).toBe(true);
+  });
+
   it('carries over choices saved when these switches greyed items out', () => {
     const legacy = parseFilters(JSON.stringify({ greyCalendars: ['wizz'], greyPlan: true, greyEvents: { 'a|b': 'Obed' } }));
 
@@ -224,5 +231,37 @@ describe('time window order', () => {
     expect(colors.get(3)).toBe(WINDOW_PALETTE[2]);
     expect(colors.get(4)).toBe('#abcdef');
     expect(windowLegend([training, learning]).find((w) => w.id === 1)!.color).toBe(WINDOW_PALETTE[0]);
+  });
+});
+
+describe('event panel and placeholders', () => {
+  const meeting = (over: Partial<Parameters<typeof busySpans>[0][number]>) => ({
+    calendarId: 'primary',
+    seriesId: 'standup',
+    start: '2026-09-28T08:00:00Z',
+    end: '2026-09-28T08:30:00Z',
+    busy: true,
+    blockId: null,
+    ...over,
+  });
+
+  it('opens an item in the panel through the URL, keeping the view and date', () => {
+    expect(calendarHref('week', '2026-09-28', 'primary:abc_1')).toBe('/calendar?view=week&date=2026-09-28&item=primary%3Aabc_1');
+    expect(calendarHref('week', '2026-09-28')).toBe('/calendar?view=week&date=2026-09-28');
+  });
+
+  it('leaves placeholder events out of busy time, for every repeat of the series', () => {
+    const events = [
+      meeting({}),
+      meeting({ seriesId: 'focus', start: '2026-09-28T09:00:00Z', end: '2026-09-28T11:00:00Z' }),
+      meeting({ seriesId: 'focus', start: '2026-09-29T09:00:00Z', end: '2026-09-29T11:00:00Z' }),
+    ];
+
+    expect(busySpans(events)).toHaveLength(3);
+    expect(busySpans(events, new Set(['primary|focus']))).toEqual([{ start: '2026-09-28T08:00:00Z', end: '2026-09-28T08:30:00Z' }]);
+  });
+
+  it('never counts TimeBlock blocks, free or declined events as busy', () => {
+    expect(busySpans([meeting({ blockId: 7 }), meeting({ busy: false })])).toEqual([]);
   });
 });

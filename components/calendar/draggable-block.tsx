@@ -121,12 +121,13 @@ export function DraggableBlock({
   return (
     <Link
       href={href}
+      scroll={false}
       draggable={false}
       className={`${className} cursor-grab touch-none select-none ${active ? 'z-20 cursor-grabbing opacity-90 shadow-lg ring-2 ring-accent' : ''} ${
         active?.saving ? 'animate-pulse' : ''
       }`}
       style={active ? { ...style, transform: `translate(${active.x}px, ${active.y}px)` } : style}
-      title="Drag to move · click to open the day"
+      title="Drag to move · click for details"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={finish}

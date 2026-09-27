@@ -1,9 +1,12 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { VIEWS } from '@/lib/calendar/views';
 import { enumOf, str } from '@/lib/forms';
-import { updateCalendarFilters, updateSettings } from '@/lib/repo/settings';
+import { deleteCalendarEvent } from '@/lib/google/calendar';
+import { setMark } from '@/lib/repo/event-marks';
+import { getSettings, updateCalendarFilters, updateSettings } from '@/lib/repo/settings';
 
 // The checkboxes post the state they switch to: "1" = shown (ticked), anything
 // else = hidden from the view.
@@ -88,4 +91,35 @@ export async function updateCalendarSettingsAction(form: FormData): Promise<void
     calendarView: enumOf(form, 'calendarView', VIEWS, 'day'),
   });
   revalidatePath('/', 'layout');
+}
+
+/**
+ * Where to go after an action that closes the event panel: the Calendar view
+ * it was opened from. Only Calendar URLs are accepted.
+ */
+function backToCalendar(form: FormData): string {
+  const to = String(form.get('returnTo') ?? '');
+  return to.startsWith('/calendar') ? to : '/calendar';
+}
+
+/** The event panel's checkboxes: "Important in Month" and "Placeholder". */
+export async function setEventMarkAction(form: FormData): Promise<void> {
+  const field = form.get('field');
+  if (field !== 'important' && field !== 'placeholder') throw new Error('Unknown mark.');
+  await setMark(str(form, 'key'), String(form.get('title') ?? ''), field, shown(form));
+  revalidatePath('/', 'layout');
+}
+
+/**
+ * Deletes a Google event from its calendar — for a repeating event, only this
+ * occurrence — and closes the panel. TimeBlock's own calendar is managed
+ * through its blocks, never from here.
+ */
+export async function deleteEventAction(form: FormData): Promise<void> {
+  const calendarId = str(form, 'calendarId');
+  const settings = await getSettings();
+  if (calendarId === settings.targetCalendarId) throw new Error("TimeBlock's own blocks are deleted as blocks.");
+  await deleteCalendarEvent(calendarId, str(form, 'eventId'));
+  revalidatePath('/', 'layout');
+  redirect(backToCalendar(form));
 }

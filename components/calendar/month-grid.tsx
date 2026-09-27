@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { DateTime } from 'luxon';
 import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
 import { layoutLanes } from '@/lib/calendar/layout';
-import { chipStyle, HideToggle, PlanLink } from './event-chip';
+import { chipStyle, ItemLink } from './event-chip';
 
 const BAR_PX = 20;
 /** Height of a cell's date line (mt-1 + h-6) — bars start just below it. */
@@ -75,7 +75,7 @@ function Week({ data, week }: { data: CalendarData; week: string[] }) {
 
             <ul className="space-y-px px-1 pb-1">
               {timed.slice(0, MAX_TIMED).map((item) => (
-                <TimedRow key={item.id} item={item} />
+                <TimedRow key={item.id} data={data} item={item} />
               ))}
               {extra > 0 && (
                 <li>
@@ -93,9 +93,11 @@ function Week({ data, week }: { data: CalendarData; week: string[] }) {
       {bars.map(({ item, lane, col, span, continuesBefore, continuesAfter }) => {
         const { style, className } = chipStyle(item);
         return (
-          <div
+          <ItemLink
             key={item.id}
-            className={`group absolute flex items-center gap-1 overflow-hidden px-1.5 text-[11px] ${className} ${
+            data={data}
+            item={item}
+            className={`absolute flex items-center gap-1 overflow-hidden px-1.5 text-[11px] ${className} ${
               continuesBefore ? 'rounded-l-none' : 'rounded-l'
             } ${continuesAfter ? 'rounded-r-none' : 'rounded-r'}`}
             style={{
@@ -105,40 +107,48 @@ function Week({ data, week }: { data: CalendarData; week: string[] }) {
               left: `calc(${(col / 7) * 100}% + 2px)`,
               width: `calc(${(span / 7) * 100}% - 4px)`,
             }}
-            title={`${item.title} · ${item.start.toFormat('d LLL')} – ${item.end.minus({ milliseconds: item.allDay ? 1 : 0 }).toFormat('d LLL')}`}
           >
-            <span className="min-w-0 flex-1 truncate font-medium">
+            <span
+              className="min-w-0 flex-1 truncate font-medium"
+              title={`${item.title} · ${item.start.toFormat('d LLL')} – ${item.end.minus({ milliseconds: item.allDay ? 1 : 0 }).toFormat('d LLL')}`}
+            >
               {continuesBefore && '◂ '}
+              {item.important && '★ '}
               {!item.allDay && !continuesBefore && `${item.start.toFormat('HH:mm')} `}
               {item.title}
               {continuesAfter && ' ▸'}
             </span>
-            <HideToggle item={item} />
-          </div>
+          </ItemLink>
         );
       })}
     </div>
   );
 }
 
-/** A timed event in a month cell: coloured dot, start time, title — as in Google Calendar. */
-function TimedRow({ item }: { item: CalendarItem }) {
+/**
+ * A timed event in a month cell: coloured dot, start time, title — as in Google
+ * Calendar. One marked important is starred and set in bold.
+ */
+function TimedRow({ data, item }: { data: CalendarData; item: CalendarItem }) {
   return (
-    <li className="group flex items-center gap-1">
-      <PlanLink
+    <li className="flex items-center gap-1">
+      <ItemLink
+        data={data}
         item={item}
         className={`flex min-w-0 flex-1 items-center gap-1 rounded px-1 text-[11px] hover:bg-background ${
           item.declined ? 'line-through' : ''
-        }`}
+        } ${item.important ? 'font-semibold' : ''}`}
       >
         <span
           className={`h-2 w-2 shrink-0 rounded-full ${item.draft ? 'border border-dashed' : ''}`}
           style={item.draft ? { borderColor: item.color } : { backgroundColor: item.color }}
         />
         <span className="shrink-0 tabular-nums opacity-80">{item.start.toFormat('HH:mm')}</span>
-        <span className="truncate">{item.title}</span>
-      </PlanLink>
-      <HideToggle item={item} />
+        <span className="truncate">
+          {item.important && '★ '}
+          {item.title}
+        </span>
+      </ItemLink>
     </li>
   );
 }

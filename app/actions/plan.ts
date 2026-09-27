@@ -3,7 +3,8 @@
 import { DateTime } from 'luxon';
 import { revalidatePath } from 'next/cache';
 import { num, str } from '@/lib/forms';
-import { clearDay, commitDay, commitFrom, moveEvent, type CommitRangeResult } from '@/lib/google/sync';
+import { redirect } from 'next/navigation';
+import { clearDay, commitDay, commitFrom, moveEvent, removeBlockEvent, type CommitRangeResult } from '@/lib/google/sync';
 import { generateDay, planCalendar, today, type CalendarPlanSummary } from '@/lib/planner';
 import * as blockRepo from '@/lib/repo/blocks';
 import { completeRitual } from '@/lib/repo/rituals';
@@ -126,4 +127,23 @@ export async function moveBlockAction(blockId: number, deltaDays: number, deltaM
 export async function unpinBlockAction(form: FormData): Promise<void> {
   await blockRepo.setPinned(num(form, 'blockId'), false);
   refresh();
+}
+
+/**
+ * Deletes a block from the event panel. A committed block's Google event goes
+ * too (Google first, so a refusal changes nothing). A block with ticked-off
+ * work is history and stays. Its tasks are planned again next time.
+ */
+export async function deleteBlockAction(form: FormData): Promise<void> {
+  const block = await blockRepo.getBlock(num(form, 'blockId'));
+  if (block) {
+    if (block.state === 'done' || blockRepo.isLocked(block)) {
+      throw new Error('This block has ticked-off work, so it stays as a record of what was done.');
+    }
+    if (block.state === 'synced') await removeBlockEvent(block);
+    await blockRepo.deleteBlock(block.id);
+  }
+  refresh();
+  const to = String(form.get('returnTo') ?? '');
+  redirect(to.startsWith('/calendar') ? to : '/calendar');
 }

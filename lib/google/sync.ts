@@ -131,6 +131,12 @@ export async function commitFrom(from: string): Promise<CommitRangeResult> {
   return total;
 }
 
+/** Removes a committed block's event from TimeBlock's calendar (already gone is fine). */
+export async function removeBlockEvent(block: blockRepo.BlockWithSegments): Promise<void> {
+  if (!block.googleEventId) return;
+  await deleteEvent(await ensureTargetCalendar(), block.googleEventId);
+}
+
 /** Moves a committed block's Google event to where the block now is. */
 export async function moveEvent(block: blockRepo.BlockWithSegments): Promise<void> {
   if (!block.googleEventId) return;

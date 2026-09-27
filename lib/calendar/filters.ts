@@ -73,11 +73,13 @@ export interface VisibilityInput {
   key: string | null;
   isBlock: boolean;
   multiDay: boolean;
+  /** Marked important: Month shows it even with "only multi-day events". */
+  important?: boolean;
 }
 
 export function isHidden(item: VisibilityInput, filters: CalendarFilters, view: CalendarView): boolean {
   // Choices stored for other views before only Month offered the switch are ignored.
-  if (view === 'month' && filters.multiDayOnly.includes(view) && !item.multiDay) return true;
+  if (view === 'month' && filters.multiDayOnly.includes(view) && !item.multiDay && !item.important) return true;
   if (item.isBlock) return filters.hidePlan;
   if (item.calendarId && filters.hiddenCalendars.includes(item.calendarId)) return true;
   return item.key !== null && item.key in filters.hiddenEvents;

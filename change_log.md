@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-09-27 | v0.6 | [E15 · Event panel](#e15--event-panel) | TB-057 – TB-061 | Done |
 | 2026-09-27 | v0.5.1 | [E14 · Readable time windows](#e14--readable-time-windows) | TB-054 – TB-056 (changes) | Done |
 | 2026-09-27 | v0.5 | [E14 · Readable time windows](#e14--readable-time-windows) | TB-051 – TB-053 | Done |
 | 2026-09-27 | v0.4.1 | [E13 · Plan the whole calendar](#e13--plan-the-whole-calendar) | TB-050 (change) | Done |
@@ -34,6 +35,75 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-09-27 · v0.6 — Event panel
+
+**Theme.** Click anything on the calendar to see it and act on it, without
+leaving the view.
+
+**Upgrade notes.** Migration `0006_event_marks` adds the `event_marks` table.
+The **3 days** view is retired; a Calendar saved or linked to it opens in Week.
+The hover checkbox on events is gone — hiding now lives in the panel.
+
+## E15 · Event panel
+
+> One place beside the calendar for everything about an event or block.
+
+### TB-057 · Click for a side panel
+*As a planner, I want clicking an event to open a panel next to the calendar,
+so that I can see and change it without losing my place.*
+
+Acceptance criteria
+- [x] Clicking an event or block in any view opens a panel to the right of the
+      grid; the clicked item is outlined; **×** closes it; the grid does not scroll.
+- [x] The open item is in the URL (`?item=`), so reloads and links keep it; a
+      deleted or hidden item closes the panel.
+- [x] Dragging a block still moves it; a click without movement opens the panel.
+- [x] Hiding an event moves from a hover checkbox on the chip into the panel.
+
+Where to look: `components/calendar/event-panel.tsx` · `event-chip.tsx`
+(`ItemLink`) · `app/calendar/page.tsx` · `lib/calendar/views.ts` (`calendarHref`).
+
+### TB-058 · Delete from the panel
+*As a planner, I want to delete an event or block from the panel, so that I can
+clear my calendar where I see it.*
+
+Acceptance criteria
+- [x] Google events on calendars the account can edit are deleted after a
+      confirmation; for a repeating event only this occurrence.
+- [x] Read-only calendars say so instead of offering delete; TimeBlock's own
+      calendar is only ever changed through its blocks.
+- [x] Blocks without ticked work can be deleted; a committed block's Google
+      event goes first, so a refusal changes nothing.
+
+### TB-059 · Important in Month view
+*As a planner, I want to mark an event important, so that it stays visible in
+the condensed Month view.*
+
+Acceptance criteria
+- [x] **★ Important in Month view** keeps the event in Month even with *Only
+      multi-day events* on, starred and in bold. Hidden calendars still win.
+
+### TB-060 · Placeholder events
+*As a planner, I want to mark an event as a placeholder, so that Plan calendar
+may schedule work during time I only held.*
+
+Acceptance criteria
+- [x] Placeholder events are not busy for *Plan calendar* or *Generate the day*;
+      they are drawn hatched and labelled on the grid.
+- [x] Marks are local, per series key, so they work for read-only calendars and
+      cover every repeat.
+
+Where to look: `lib/calendar/busy.ts` (`busySpans`, + tests) ·
+`lib/repo/event-marks.ts` · `lib/planner.ts`.
+
+### TB-061 · Retire the 3 days view
+*As a planner, I want views I do not use removed, so that the switcher is simpler.*
+
+Acceptance criteria
+- [x] Views: Today · Work week · Week · Month. A stored or linked `3days` opens Week.
 
 ---
 
