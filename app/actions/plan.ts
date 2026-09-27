@@ -4,7 +4,7 @@ import { DateTime } from 'luxon';
 import { revalidatePath } from 'next/cache';
 import { num, str } from '@/lib/forms';
 import { redirect } from 'next/navigation';
-import { clearDay, commitDay, commitFrom, moveEvent, removeBlockEvent, type CommitRangeResult } from '@/lib/google/sync';
+import { clearDay, commitDay, commitFrom, deleteBlockEverywhere, moveEvent, type CommitRangeResult } from '@/lib/google/sync';
 import { generateDay, planCalendar, today, type CalendarPlanSummary } from '@/lib/planner';
 import * as blockRepo from '@/lib/repo/blocks';
 import { completeRitual } from '@/lib/repo/rituals';
@@ -136,13 +136,7 @@ export async function unpinBlockAction(form: FormData): Promise<void> {
  */
 export async function deleteBlockAction(form: FormData): Promise<void> {
   const block = await blockRepo.getBlock(num(form, 'blockId'));
-  if (block) {
-    if (block.state === 'done' || blockRepo.isLocked(block)) {
-      throw new Error('This block has ticked-off work, so it stays as a record of what was done.');
-    }
-    if (block.state === 'synced') await removeBlockEvent(block);
-    await blockRepo.deleteBlock(block.id);
-  }
+  if (block) await deleteBlockEverywhere(block);
   refresh();
   const to = String(form.get('returnTo') ?? '');
   redirect(to.startsWith('/calendar') ? to : '/calendar');

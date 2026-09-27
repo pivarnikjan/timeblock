@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
 import { textOn } from '@/lib/calendar/colors';
 import { layoutColumns, layoutLanes } from '@/lib/calendar/layout';
+import { vacationPieces, type VacationPiece } from '@/lib/calendar/vacation-overlay';
 import { DraggableBlock } from './draggable-block';
 import { chipStyle, ItemLink, itemHref } from './event-chip';
 import { ScrollArea } from './scroll-area';
@@ -34,6 +35,12 @@ export function TimeGrid({ data }: { data: CalendarData }) {
     days.length,
   );
   const laneCount = lanes.reduce((max, l) => Math.max(max, l.lane + 1), 0);
+  const away = vacationPieces(
+    data.items.flatMap((i) => (i.vacation ? [i.vacation] : [])),
+    days,
+    data.zone,
+    data.hours,
+  );
 
   // Open an hour before now when today is shown, else an hour before the first
   // timed item — never scrolled to an empty early morning.
@@ -124,7 +131,16 @@ export function TimeGrid({ data }: { data: CalendarData }) {
           </div>
 
           {days.map((day, i) => (
-            <DayColumn key={day} data={data} day={day} dayIndex={i} timed={timed} height={height} hours={hours} />
+            <DayColumn
+              key={day}
+              data={data}
+              day={day}
+              dayIndex={i}
+              timed={timed}
+              height={height}
+              hours={hours}
+              away={away[day] ?? []}
+            />
           ))}
         </div>
       </ScrollArea>
@@ -139,11 +155,13 @@ function DayColumn({
   timed,
   height,
   hours,
+  away,
 }: {
   data: CalendarData;
   day: string;
   dayIndex: number;
   timed: CalendarItem[];
+  away: VacationPiece[];
   height: number;
   hours: number[];
 }) {
@@ -227,6 +245,11 @@ function DayColumn({
 
       {data.filters.windowsInFront && <WindowBands data={data} day={day} front />}
 
+      {/* Vacation: hatched over everything, so it is plain what falls inside it */}
+      {away.map((piece) => (
+        <VacationHatch key={piece.id} piece={piece} />
+      ))}
+
       {nowTop !== null && nowTop >= 0 && nowTop <= endMin - startMin && (
         <div className="pointer-events-none absolute inset-x-0 z-10" style={{ top: nowTop * PX_PER_MIN }}>
           <div className="relative h-0.5 bg-[#ea4335]">
@@ -258,7 +281,7 @@ function WindowBands({ data, day, front }: { data: CalendarData; day: string; fr
         const time = `${band.start.toFormat('HH:mm')}–${band.end.toFormat('HH:mm')}`;
         return (
           <div
-            key={band.id}
+            key={`${band.id}@${band.start.toMillis()}`}
             className={`pointer-events-none absolute inset-x-0 overflow-hidden ${front ? 'z-10 border-2' : 'border-y border-dashed'}`}
             style={{
               top,
@@ -289,5 +312,37 @@ function WindowBands({ data, day, front }: { data: CalendarData; day: string; fr
         );
       })}
     </>
+  );
+}
+
+const VACATION_RED = '#E53935';
+
+/**
+ * A vacation's share of one day: red diagonal hatching with a red outline, in
+ * front of events and blocks (clicks pass through to them). Deliberately not
+ * how Google draws anything — time away should be unmistakable.
+ */
+function VacationHatch({ piece }: { piece: VacationPiece }) {
+  const heightPx = piece.length * PX_PER_MIN;
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 z-[15] flex items-center justify-center overflow-hidden border-2"
+      style={{
+        top: piece.top * PX_PER_MIN,
+        height: heightPx,
+        borderColor: VACATION_RED,
+        backgroundImage: `repeating-linear-gradient(135deg, ${VACATION_RED}b3 0 2px, transparent 2px 14px)`,
+      }}
+      aria-label="Vacation"
+    >
+      {piece.labelled && heightPx >= 60 && (
+        <span
+          className="-rotate-[65deg] select-none whitespace-nowrap text-xl font-bold uppercase tracking-[0.2em]"
+          style={{ color: VACATION_RED, textShadow: '0 0 6px var(--surface)' }}
+        >
+          Vacation
+        </span>
+      )}
+    </div>
   );
 }

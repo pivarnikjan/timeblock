@@ -1,5 +1,6 @@
 import type { DateTime } from 'luxon';
-import { compareWindows, windowInterval, windowOpensOn, type WindowSpec } from '@/lib/scheduler/day';
+import { closuresFor, compareWindows, windowInterval, windowOpensOn, type Closure, type WindowSpec } from '@/lib/scheduler/day';
+import { subtract } from '@/lib/scheduler/intervals';
 import { windowColors } from './colors';
 
 /** A time window as the Calendar draws and lists it. */
@@ -33,11 +34,16 @@ export function windowLegend(windows: (WindowSpec & { id: number; color: string 
     .map((w) => ({ id: w.id, name: w.name, start: w.start, end: w.end, color: colors.get(w.id)! }));
 }
 
-/** The bands for every visible day, labelling each window once. */
+/**
+ * The bands for every visible day, labelling each window once. Where a
+ * vacation closes a window, that part of its band is left out — the window
+ * does not apply then — so a band may come in pieces or not at all.
+ */
 export function windowBands(
   days: string[],
   windows: (WindowSpec & { id: number; color: string | null })[],
   zone: string,
+  closures: Closure[] = [],
 ): Record<string, WindowBand[]> {
   const legend = new Map(windowLegend(windows).map((l) => [l.id, l]));
   const named = new Set<number>();
@@ -45,11 +51,13 @@ export function windowBands(
   for (const day of days) {
     bands[day] = windows
       .filter((w) => windowOpensOn(w, day, zone))
-      .map((w) => {
-        const labelled = !named.has(w.id);
-        named.add(w.id);
-        return { id: w.id, name: w.name, color: legend.get(w.id)!.color, labelled, ...windowInterval(day, w, zone) };
-      });
+      .flatMap((w) =>
+        subtract(windowInterval(day, w, zone), closuresFor(closures, w.id, zone)).map((open) => {
+          const labelled = !named.has(w.id);
+          named.add(w.id);
+          return { id: w.id, name: w.name, color: legend.get(w.id)!.color, labelled, ...open };
+        }),
+      );
   }
   return bands;
 }

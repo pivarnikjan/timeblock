@@ -2,14 +2,17 @@ import type { DateTime } from 'luxon';
 import type { Energy } from '@/lib/db/schema';
 import {
   anytimeWindow,
+  closuresFor,
   freeSlots,
+  openSlots,
+  type Closure,
   windowInterval,
   windowOpensOn,
   type BusySpan,
   type DayShape,
   type WindowSpec,
 } from './day';
-import { minutes, type Interval } from './intervals';
+import { minutes, subtract, type Interval } from './intervals';
 
 /** A split never leaves either side shorter than this. */
 export const MIN_SPLIT_MIN = 15;
@@ -257,6 +260,7 @@ function mergeSegments(segments: PlannedSegment[]): PlannedSegment[] {
  *
  * Windows are filled in order and each one's blocks become busy time for the
  * next, so overlapping windows can never double-book the same minutes.
+ * `closures` take a window out of the day for a while (a vacation).
  */
 export function planDay(
   date: string,
@@ -264,6 +268,7 @@ export function planDay(
   busy: BusySpan[],
   windows: WindowSpec[],
   tasks: PlannableTask[],
+  closures: Closure[] = [],
 ): Plan {
   const known = new Set(windows.map((w) => w.id));
   const specs = [...windows];
@@ -297,7 +302,17 @@ export function planDay(
       continue;
     }
 
-    const slots = freeSlots(date, shape, busyNow, windowInterval(date, spec, shape.timezone));
+    const window = windowInterval(date, spec, shape.timezone);
+    const closed = closuresFor(closures, spec.id, shape.timezone);
+    // A window the vacation covers entirely: say so, rather than "no room left".
+    if (closed.length > 0 && subtract(window, closed).length === 0) {
+      for (const t of mine) {
+        unplaced.push({ taskId: t.id, remainingMin: t.remainingMin, reason: `${spec.name} window is closed — you are on vacation` });
+      }
+      continue;
+    }
+
+    const slots = openSlots(freeSlots(date, shape, busyNow, window), closed, shape);
     freeMinutes += slots.reduce((sum, s) => sum + minutes(s), 0);
 
     const queue: QueueItem[] = mine.map((t) => ({ taskId: t.id, remaining: t.remainingMin }));

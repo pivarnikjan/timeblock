@@ -7,10 +7,12 @@ import { PlanCalendarBar } from '@/components/plan-calendar-bar';
 import { TimeGrid } from '@/components/calendar/time-grid';
 import { PlanningPanel } from '@/components/planning-panel';
 import { loadCalendarView } from '@/lib/calendar/load';
+import { vacationConflicts } from '@/lib/calendar/vacation-conflicts';
 import { parseView } from '@/lib/calendar/views';
 import { busySpans } from '@/lib/google/calendar';
 import { loadDay } from '@/lib/planner';
 import * as blockRepo from '@/lib/repo/blocks';
+import { getVacation } from '@/lib/repo/vacations';
 import { getSettings } from '@/lib/repo/settings';
 import { nowIn } from '@/lib/time/periods';
 
@@ -32,6 +34,9 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
   ]);
   // The clicked item, if it is still there (a deleted or hidden one simply closes the panel).
   const selected = data.items.find((i) => i.id === askedItem) ?? null;
+  // An open vacation lists what is already scheduled during it (read for its whole span, not just this view).
+  const vacation = selected?.vacation ? await getVacation(selected.vacation.id) : null;
+  const conflicts = vacation ? await vacationConflicts(vacation, settings) : null;
   const drafts = {
     blocks: draftDates.reduce((n, d) => n + d.blocks, 0),
     days: draftDates.length,
@@ -66,10 +71,18 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
         </p>
       )}
 
-      <div className={`grid gap-5 ${selected ? 'lg:grid-cols-[13rem_minmax(0,1fr)_19rem]' : 'lg:grid-cols-[13rem_minmax(0,1fr)]'}`}>
+      <div
+        className={`grid gap-5 ${
+          !selected
+            ? 'lg:grid-cols-[13rem_minmax(0,1fr)]'
+            : selected.kind === 'vacation'
+              ? 'lg:grid-cols-[13rem_minmax(0,1fr)_22rem]'
+              : 'lg:grid-cols-[13rem_minmax(0,1fr)_19rem]'
+        }`}
+      >
         <FilterPanel data={data} />
         {view === 'month' ? <MonthGrid data={data} /> : <TimeGrid data={data} />}
-        {selected && <EventPanel key={selected.id} data={data} item={selected} />}
+        {selected && <EventPanel key={selected.id} data={data} item={selected} conflicts={conflicts} />}
       </div>
 
       {day ? (

@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import type { calendar_v3 } from 'googleapis';
 import { calendarColor } from '@/lib/calendar/colors';
 import { calendarApi } from './client';
+import { VACATION_ID_KEY } from './vacation-event';
 
 /** Marks the events TimeBlock owns, so re-planning never touches a real meeting. */
 export const BLOCK_ID_KEY = 'tbBlockId';
@@ -24,6 +25,8 @@ export interface CalendarEvent {
   colorId: string | null;
   /** Set when TimeBlock created this event. */
   blockId: number | null;
+  /** Set when this event mirrors a TimeBlock vacation. */
+  vacationId: number | null;
   /** One occurrence of a repeating event. */
   recurring: boolean;
   /** The event in Google Calendar's web app. */
@@ -72,6 +75,7 @@ function parseEvent(event: calendar_v3.Schema$Event, calendarId: string, zone: s
 
   const declined = event.attendees?.some((a) => a.self && a.responseStatus === 'declined') ?? false;
   const blockId = Number(event.extendedProperties?.private?.[BLOCK_ID_KEY]);
+  const vacationId = Number(event.extendedProperties?.private?.[VACATION_ID_KEY]);
 
   return {
     id: event.id,
@@ -85,6 +89,7 @@ function parseEvent(event: calendar_v3.Schema$Event, calendarId: string, zone: s
     declined,
     colorId: event.colorId ?? null,
     blockId: Number.isFinite(blockId) && blockId > 0 ? blockId : null,
+    vacationId: Number.isFinite(vacationId) && vacationId > 0 ? vacationId : null,
     recurring: Boolean(event.recurringEventId),
     htmlLink: event.htmlLink ?? null,
   };

@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import type { BusySpan, DayShape, WindowSpec } from './day';
+import type { BusySpan, Closure, DayShape, WindowSpec } from './day';
 import { planDay, type PlannableTask, type PlannedBlock } from './plan';
 
 export interface ForecastTask extends PlannableTask {
@@ -40,6 +40,7 @@ export function planRange(
   windows: WindowSpec[],
   tasks: ForecastTask[],
   busyByDate: Map<string, BusySpan[]> = new Map(),
+  closures: Closure[] = [],
 ): RangePlan {
   const remaining = new Map(tasks.map((t) => [t.id, t.remainingMin]));
   const finishes = new Map<number, string>();
@@ -57,7 +58,7 @@ export function planRange(
       .map((t) => ({ ...t, remainingMin: remaining.get(t.id)! }));
     if (eligible.length === 0) continue;
 
-    const plan = planDay(date, shape, busyByDate.get(date) ?? [], windows, eligible);
+    const plan = planDay(date, shape, busyByDate.get(date) ?? [], windows, eligible, closures);
     for (const block of plan.blocks) {
       for (const seg of block.segments) {
         const left = (remaining.get(seg.taskId) ?? 0) - seg.minutes;
@@ -84,7 +85,8 @@ export function forecast(
   windows: WindowSpec[],
   tasks: ForecastTask[],
   busyByDate: Map<string, BusySpan[]> = new Map(),
+  closures: Closure[] = [],
 ): Forecast {
-  const { from: f, to, finishes, leftover } = planRange(from, days, shape, windows, tasks, busyByDate);
+  const { from: f, to, finishes, leftover } = planRange(from, days, shape, windows, tasks, busyByDate, closures);
   return { from: f, to, finishes, leftover };
 }

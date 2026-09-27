@@ -21,12 +21,25 @@ import { placeholderKeys } from '@/lib/repo/event-marks';
 import { listAllHorizons } from '@/lib/repo/horizons';
 import { getSettings } from '@/lib/repo/settings';
 import { listAllTasks } from '@/lib/repo/tasks';
+import { listVacations } from '@/lib/repo/vacations';
 import { listWindows, toSpec } from '@/lib/repo/windows';
-import { atLocalTime, freeSlots, windowInterval, windowOpensOn, type BusySpan, type DayShape, type WindowSpec } from '@/lib/scheduler/day';
+import {
+  atLocalTime,
+  closuresFor,
+  freeSlots,
+  openSlots,
+  windowInterval,
+  windowOpensOn,
+  type BusySpan,
+  type Closure,
+  type DayShape,
+  type WindowSpec,
+} from '@/lib/scheduler/day';
 import { forecast, planRange, type ForecastTask } from '@/lib/scheduler/forecast';
 import type { Interval } from '@/lib/scheduler/intervals';
 import { planDay, type Plan, type PlannableTask } from '@/lib/scheduler/plan';
 import { nowIn } from '@/lib/time/periods';
+import { vacationClosures } from '@/lib/vacation';
 
 /** How far ahead the forecast looks: long enough to see a month's work land. */
 export const FORECAST_DAYS = 42;
@@ -51,15 +64,18 @@ export interface PlanningContext {
   progress: Map<number, Progress>;
   /** Course order per task — see `sequencePositions`. */
   sequences: Map<number, SequencePosition>;
+  /** Windows closed by vacations. */
+  closures: Closure[];
 }
 
 export async function loadContext(): Promise<PlanningContext> {
-  const [settings, windows, horizons, tasks, ticked] = await Promise.all([
+  const [settings, windows, horizons, tasks, ticked, vacations] = await Promise.all([
     getSettings(),
     listWindows(),
     listAllHorizons(),
     listAllTasks(),
     blockRepo.tickedMinutesByTask(),
+    listVacations(),
   ]);
   return {
     settings,
@@ -72,6 +88,7 @@ export async function loadContext(): Promise<PlanningContext> {
     ticked,
     progress: computeProgress({ horizons, tasks, ticked }),
     sequences: sequencePositions(tasks, indexHorizons(horizons)),
+    closures: vacationClosures(vacations),
   };
 }
 
@@ -181,7 +198,7 @@ export async function generateDay(date: string): Promise<Plan> {
 
   const busy = [...calendar.busy, ...reservedSpans(ctx, date, blocks)];
   const tasks = withoutPinned(schedulableOn(ctx, date), pinnedMinutes(blocks, date));
-  const plan = planDay(date, ctx.shape, busy, ctx.specs, tasks);
+  const plan = planDay(date, ctx.shape, busy, ctx.specs, tasks, ctx.closures);
 
   await blockRepo.replaceDrafts(date, toDrafts(plan.blocks));
   return plan;
@@ -270,7 +287,7 @@ export async function planCalendar(): Promise<CalendarPlanSummary> {
   }
   const tasks = withoutPinned(forecastable, pinnedMinutes(blocks, from));
 
-  const plan = planRange(from, PLAN_CALENDAR_DAYS, ctx.shape, ctx.specs, tasks, busyByDate);
+  const plan = planRange(from, PLAN_CALENDAR_DAYS, ctx.shape, ctx.specs, tasks, busyByDate, ctx.closures);
   await blockRepo.replaceDraftsFrom(
     from,
     plan.days.map((d) => ({ date: d.date, drafts: toDrafts(d.blocks) })),
@@ -338,7 +355,7 @@ export async function outlook(ctx: PlanningContext, todaysBusy: BusySpan[] = [])
 
   const blocks = await blockRepo.listForDate(from);
   const busy = new Map([[from, [...todaysBusy, ...reservedSpans(ctx, from, blocks)]]]);
-  const result = forecast(from, FORECAST_DAYS, ctx.shape, ctx.specs, forecastable, busy);
+  const result = forecast(from, FORECAST_DAYS, ctx.shape, ctx.specs, forecastable, busy, ctx.closures);
 
   const schedulable = new Set(forecastable.map((t) => t.id));
   const horizons = new Map<number, HorizonOutlook>();
@@ -435,7 +452,11 @@ export async function loadDay(date?: string, calendar?: CalendarLoad): Promise<D
     .filter((spec) => windowOpensOn(spec, resolved, ctx.settings.timezone))
     .map((spec) => ({
       window: spec,
-      slots: freeSlots(resolved, ctx.shape, day.busy, windowInterval(resolved, spec, ctx.settings.timezone)),
+      slots: openSlots(
+        freeSlots(resolved, ctx.shape, day.busy, windowInterval(resolved, spec, ctx.settings.timezone)),
+        closuresFor(ctx.closures, spec.id, ctx.settings.timezone),
+        ctx.shape,
+      ),
     }));
 
   return {

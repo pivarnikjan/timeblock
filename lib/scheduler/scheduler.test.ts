@@ -429,3 +429,37 @@ describe('as soon as possible', () => {
     expect(plan.unplaced.find((u) => u.taskId === 2)?.remainingMin).toBe(25);
   });
 });
+
+describe('vacation', () => {
+  const closeAll = (from: string, to: string, windowIds: (number | null)[] = [LEARNING.id, WORK.id]) =>
+    windowIds.map((windowId) => ({ windowId, start: from, end: to }));
+
+  it('places nothing in a window the vacation closes, and says why', () => {
+    const plan = planDay(MONDAY, SHAPE, [], WINDOWS, [task({ id: 1 }), task({ id: 2, windowId: WORK.id })], closeAll(local(MONDAY, '00:00'), local(TUESDAY, '00:00')));
+
+    expect(plan.blocks).toEqual([]);
+    expect(plan.unplaced.map((u) => u.reason)).toEqual([
+      'Learning window is closed — you are on vacation',
+      'Work window is closed — you are on vacation',
+    ]);
+  });
+
+  it('closes only the windows chosen for it', () => {
+    const plan = planDay(MONDAY, SHAPE, [], WINDOWS, [task({ id: 1 }), task({ id: 2, windowId: WORK.id })], closeAll(local(MONDAY, '00:00'), local(TUESDAY, '00:00'), [LEARNING.id]));
+
+    expect(plan.blocks.flatMap((b) => b.segments.map((s) => s.taskId))).toEqual([2]);
+  });
+
+  it('opens the window again the minute a part-day vacation ends — no buffer, unlike a meeting', () => {
+    const plan = planDay(MONDAY, SHAPE, [], WINDOWS, [task({ id: 1, remainingMin: 30 })], closeAll(local(MONDAY, '00:00'), local(MONDAY, '12:30')));
+
+    expect(layout(plan.blocks, new Map([[1, 'a']]))).toEqual(['12:30–13:00 a 30']);
+  });
+
+  it('carries the work past the vacation when planning the calendar', () => {
+    // Away Tue–Wed: a 300-minute course fills Monday, skips two days, finishes Thursday.
+    const result = planRange(MONDAY, 10, SHAPE, WINDOWS, [{ ...task({ id: 1, remainingMin: 300 }), availableFrom: null }], new Map(), closeAll(local(TUESDAY, '00:00'), local('2026-10-01', '00:00')));
+
+    expect(result.days.map((d) => d.date)).toEqual([MONDAY, '2026-10-01']);
+  });
+});
