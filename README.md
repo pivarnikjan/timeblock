@@ -230,11 +230,81 @@ put it in your calendar at the booked time and the planner works around it;
 mark the November outcome done when you pass. Which weeks serve which outcome is
 an example — edit it to your plan.
 
+## Prerequisites
+
+Everything needed to run and work on TimeBlock on a new Windows computer. The
+app itself is plain Node.js; the start, stop and autostart scripts are
+Windows PowerShell.
+
+| Tool | Why | Install | Check |
+| --- | --- | --- | --- |
+| **Node.js 24 LTS or newer** (tested on 26) | Runs the app; the database is Node's built-in `node:sqlite` | `winget install --id OpenJS.NodeJS.LTS --source winget` | `node -v` |
+| **Git** | Get the code, commit | `winget install --id Git.Git --source winget` | `git --version` |
+| **GitHub SSH key** | Clone and push `git@github.com:…` | see [GitHub over SSH](#github-over-ssh) | `ssh -T git@github.com` |
+| **GitHub CLI** (optional) | Open pull requests from the terminal | `winget install --id GitHub.cli --source winget` | `gh --version` |
+| **Google account + Cloud project** | Calendar access | [`docs/google-calendar-setup.md`](docs/google-calendar-setup.md) | **Settings** shows *Connected* |
+
+### Installing with winget
+
+- **Always add `--source winget`.** Without it winget also searches the
+  Microsoft Store, and on a machine whose HTTPS traffic is inspected — an
+  antivirus with HTTPS scanning (e.g. Avast Web Shield) or a company proxy —
+  that fails with `Failed when searching source: msstore … 0x8a15005e : The
+  server certificate did not match any of the expected values`. None of these
+  tools come from the Store.
+- **If winget still fails with a certificate error**, download the installer
+  from the vendor instead: [nodejs.org](https://nodejs.org) (LTS),
+  [git-scm.com](https://git-scm.com/download/win),
+  [cli.github.com](https://cli.github.com) (`gh_*_windows_amd64.msi`).
+- **Open a new terminal after installing.** A terminal that was already open
+  does not see the new program, so it answers `The term 'gh' is not recognized
+  as the name of a cmdlet…`. If a new terminal still does not find it, call it
+  by its full path, e.g. `& "C:\Program Files\GitHub CLI\gh.exe" auth login`.
+
+### GitHub over SSH
+
+Once per computer:
+
+```powershell
+ssh-keygen -t ed25519 -C "you@example.com"   # accept the default file; a passphrase is recommended
+Get-Content $HOME\.ssh\id_ed25519.pub | Set-Clipboard
+```
+
+Paste the key into GitHub → **Settings → SSH and GPG keys → New SSH key**, then
+check with `ssh -T git@github.com` (answer *yes* the first time; it greets you
+by username).
+
+Set your commit identity for this repository. GitHub's no-reply address keeps
+your personal email out of the public history (find it under GitHub →
+**Settings → Emails**):
+
+```powershell
+git config user.name "your-github-username"
+git config user.email "ID+your-github-username@users.noreply.github.com"
+```
+
+### GitHub CLI (for pull requests)
+
+After installing, in a **new** terminal:
+
+```powershell
+gh auth login   # GitHub.com → SSH → your key → Login with a web browser
+gh auth status
+```
+
+Without `gh`, open a pull request from the branch's page on GitHub instead.
+
 ## Setup
 
-```bash
+```powershell
+git clone git@github.com:pivarnikjan/timeblock.git
+cd timeblock
 npm install
+Copy-Item .env.local.example .env.local   # then fill it in: see Connect Google Calendar
 ```
+
+`.env.local` holds your Google client secret. It is git-ignored — never commit
+it, and never paste its values into issues or pull requests.
 
 ### Connect Google Calendar
 
@@ -275,6 +345,25 @@ the port, and opens the Calendar. Undo with `.\scripts\install-autostart.ps1 -Re
 
 Add `-NoBrowser` to skip opening the browser, `-Port 4322` for another port.
 
+**Running the scripts.**
+
+- Run them from the project folder. Anywhere else, `.\scripts\…` does not
+  exist and PowerShell says *The argument 'scripts/start-timeblock.ps1' to the
+  -File parameter does not exist* — `cd` into the project, or give the full
+  path.
+- If Windows refuses to run unsigned scripts, allow it for that one run only
+  (no system setting changes):
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\start-timeblock.ps1 -Restart
+  ```
+
+- Start and deploy from **your own terminal** (Windows Terminal, PowerShell,
+  VS Code). Apps installed as packaged Store/MSIX apps — including some AI
+  coding assistants — can see a private copy of `%LOCALAPPDATA%`; a server
+  started from their built-in terminal would then use a different database than
+  yours.
+
 The server runs hidden; its output goes to `%LOCALAPPDATA%\timeblock\logs\`
 (`server.out.log`, `server.err.log`, and the previous run's as `*.previous.log`).
 Look there first when something fails.
@@ -314,6 +403,19 @@ npm test              # scheduler, hierarchy, CSV import, database bridge
 npm run build         # type-check and production build
 npm run db:generate   # regenerate SQL after editing lib/db/schema.ts
 ```
+
+To work on a change: branch, test, push, open a pull request.
+
+```powershell
+git checkout -b feature/short-name
+npm test; npm run lint
+git push -u origin feature/short-name
+gh pr create --base main       # or open the PR from the branch page on GitHub
+```
+
+Try changes against a throwaway database, never your real one: run
+`next dev` on another port with its own data folder, e.g.
+`$env:TIMEBLOCK_DATA_DIR="$env:TEMP\timeblock-test"; npx next dev --port 4322`.
 
 Migrations in `drizzle/` are applied automatically the first time the database
 is opened. Data changes drizzle-kit cannot express (seeding windows, copying old
