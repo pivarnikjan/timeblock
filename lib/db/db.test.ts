@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { blocks, eventMarks, horizons, settings, tasks, timeWindows } from './schema';
+import { blocks, eventMarks, horizons, settings, tasks, timeWindows, vacations } from './schema';
 import { testDb } from './testing';
 
 describe('sqlite-proxy bridge over node:sqlite', () => {
@@ -123,5 +123,13 @@ describe('sqlite-proxy bridge over node:sqlite', () => {
     const [row] = await db.select().from(eventMarks);
 
     expect(row).toMatchObject({ key: 'primary|focus', title: 'Focus', important: false, placeholder: true });
+  });
+
+  it('keeps a vacation out of Google Calendar unless asked', async () => {
+    const { db } = testDb();
+
+    const [v] = await db.insert(vacations).values({ startsAt: '2026-10-01T22:00:00Z', endsAt: '2026-10-03T22:00:00Z', windows: '1,2' }).returning();
+
+    expect(v).toMatchObject({ inGoogle: false, googleEventId: null });
   });
 });

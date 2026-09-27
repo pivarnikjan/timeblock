@@ -116,6 +116,38 @@ beside the calendar (the grid stays where it is; **×** closes it):
   and **Delete block** (its Google event too, if committed; its tasks are
   planned again next time). A block with ticked-off work stays as history.
 
+**Set vacation.** The **🏖 Set vacation** button beside the view switcher opens
+a form: from and until (date and time — an end of 23:59 covers the whole last
+day), the time windows you are unavailable for (all ticked by default, plus
+*Anytime* for work with no window), and an optional note. While you are away
+nothing is planned in those windows — *Plan calendar*, *Generate the day* and
+the goal forecasts all skip them, and a window reopens the minute the vacation
+ends. Windows you leave unticked (say, *Family*) work as usual.
+
+On the calendar a vacation is unmistakable — deliberately unlike Google: its
+exact span is **hatched in red** over everything on the time grid (Friday
+00:00 – Saturday 14:30 covers all of Friday and Saturday's morning), with a red
+bar across its days in the all-day row, and the closed windows' bands are left
+out. Click the bar to open it in the side panel:
+
+- **Scheduled during this vacation** lists everything already in its span —
+  Google events on every calendar (lunches, family time, meetings) and
+  TimeBlock blocks — each with a checkbox (*all* / *none* to pick quickly).
+  **Delete N selected**, after a confirmation, deletes the ticked ones, from
+  Google Calendar too (for a repeating event, only that repeat). Events on
+  read-only calendars and blocks with ticked-off work are listed but cannot be
+  ticked. Nothing is ticked to start with.
+- **Edit dates, windows or note** reopens the form with its current values,
+  including **Also show in Google Calendar**: ticked, the vacation is kept as an
+  event in TimeBlock's own calendar (all-day for whole days); changes follow it
+  there when you save, and unticking removes it. If Google cannot be reached the
+  vacation is still saved and the panel says so — save again to retry.
+- **Delete vacation** removes it; its windows open again.
+
+Saving a new vacation opens it in the panel straight away, so you see what it
+collides with at once. Upcoming vacations are also listed under the button.
+Run *Plan calendar* afterwards to move work that was planned into it.
+
 **Colours are Google's.** An event uses its own colour if it has one, else its
 calendar's — mapped to the palette Google Calendar's web app shows (the API
 still reports an older one). TimeBlock's blocks use the colours they get once
@@ -417,12 +449,23 @@ Look there first when something fails.
 
 ## What it writes to Google
 
-Only to a secondary calendar it creates itself, **TimeBlock — Focus**. A
-combined block is titled "First task +2" and its description lists every task
-with its minutes and the goal chain it serves. Every event carries a private
-`tbBlockId` extended property, and only events carrying one are ever updated or
-deleted. Your real meetings are never touched, and you can hide every block with
-one checkbox in Google Calendar.
+On its own, only to a secondary calendar it creates itself, **TimeBlock —
+Focus**:
+
+- **Blocks.** A combined block is titled "First task +2" and its description
+  lists every task with its minutes and the goal chain it serves. Each carries
+  a private `tbBlockId` extended property.
+- **Vacations**, when *Also show in Google Calendar* is ticked: "🏖 Vacation ·
+  note", all-day when it covers whole days, else timed, carrying a private
+  `tbVacationId`. Kept in step when the vacation is edited, and removed when it
+  is deleted or the box is unticked. The planner never counts it as busy — the
+  vacation itself closes the windows it names.
+
+Only events carrying one of those properties are ever updated or deleted
+automatically, and you can hide all of them with one checkbox in Google
+Calendar. Your other events are changed only when you delete one yourself —
+from the event panel or a vacation's *Scheduled during this vacation* list —
+always after a confirmation.
 
 ## Where your data lives
 

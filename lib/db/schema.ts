@@ -158,6 +158,29 @@ export const settings = sqliteTable('settings', {
 });
 
 /**
+ * Time away. For its span the chosen windows do not apply, so no work is
+ * planned in them; other windows (e.g. Family) keep working.
+ */
+export const vacations = sqliteTable(
+  'vacations',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    /** UTC ISO instants; the end is exclusive. */
+    startsAt: text('starts_at').notNull(),
+    endsAt: text('ends_at').notNull(),
+    /** Windows it closes, comma separated: window ids, and `anytime` for work with no window. */
+    windows: text('windows').notNull().default(''),
+    note: text('note'),
+    /** Wanted in Google Calendar (TimeBlock's own calendar). */
+    inGoogle: integer('in_google', { mode: 'boolean' }).notNull().default(false),
+    /** The Google event mirroring it, once created. */
+    googleEventId: text('google_event_id'),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (t) => [index('vacations_range_idx').on(t.startsAt, t.endsAt)],
+);
+
+/**
  * What the user said about a Google event, kept locally so it works for
  * read-only calendars too. Keyed like hiding (`calendarId|seriesId`), so a mark
  * on a repeating event covers every repeat.
@@ -203,5 +226,6 @@ export type NewBlock = typeof blocks.$inferInsert;
 export type BlockSegment = typeof blockSegments.$inferSelect;
 export type Settings = typeof settings.$inferSelect;
 export type EventMark = typeof eventMarks.$inferSelect;
+export type Vacation = typeof vacations.$inferSelect;
 export type RitualKind = (typeof RITUALS)[number];
 export type Energy = (typeof ENERGY)[number];

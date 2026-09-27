@@ -4,6 +4,7 @@ import { energyColor } from '@/lib/calendar/colors';
 import type { CalendarData } from '@/lib/calendar/load';
 import { VIEW_LABEL, VIEWS } from '@/lib/calendar/views';
 import { ToggleForm } from './toggle';
+import { VacationButton } from './vacation-button';
 
 const href = (view: string, date: string) => `/calendar?view=${view}&date=${date}`;
 
@@ -32,7 +33,19 @@ export function CalendarHeader({ data }: { data: CalendarData }) {
         </Link>
       )}
 
-      <nav className="ml-auto flex overflow-hidden rounded-md border border-border text-sm" aria-label="Calendar view">
+      <div className="ml-auto">
+        <VacationButton
+          windows={data.windows}
+          upcoming={data.upcomingVacations}
+          today={data.today}
+          view={range.view}
+          anchor={range.anchor}
+          visible={range.days}
+          googleConnected={data.connection.status === 'connected'}
+        />
+      </div>
+
+      <nav className="flex overflow-hidden rounded-md border border-border text-sm" aria-label="Calendar view">
         {VIEWS.map((view) => (
           <Link
             key={view}

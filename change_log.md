@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-09-27 | v0.7 | [E16 · Vacation](#e16--vacation) | TB-062 – TB-066 | Done |
 | 2026-09-27 | v0.6 | [E15 · Event panel](#e15--event-panel) | TB-057 – TB-061 | Done |
 | 2026-09-27 | v0.5.1 | [E14 · Readable time windows](#e14--readable-time-windows) | TB-054 – TB-056 (changes) | Done |
 | 2026-09-27 | v0.5 | [E14 · Readable time windows](#e14--readable-time-windows) | TB-051 – TB-053 | Done |
@@ -35,6 +36,116 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-09-27 · v0.7 — Vacation
+
+**Theme.** Time away closes the windows you choose, so nothing is planned while
+you are gone.
+
+**Upgrade notes.** Migrations `0007_vacations` and `0008_vacation_in_google`
+add the `vacations` table and its Google Calendar link.
+Existing plans are not changed when a vacation is set — run *Plan calendar*.
+
+## E16 · Vacation
+
+> Say when you are away and which kinds of work stop, and let the plan flow
+> around it.
+
+### TB-062 · Vacation closes windows for planning
+*As a planner, I want to set vacation days during which Learning and Work do
+not apply, so that no task is allocated while I am away.*
+
+Acceptance criteria
+- [x] A vacation has a start and end (date and time; an end of 23:59 covers the
+      whole day) and the windows it closes, including *Anytime*.
+- [x] *Plan calendar*, *Generate the day* and forecasts place nothing in a
+      closed window; other windows work as usual; a window reopens the minute
+      the vacation ends (no buffer, unlike a meeting).
+- [x] A day planned during a vacation says why: "Learning window is closed —
+      you are on vacation".
+
+Where to look: `lib/scheduler/day.ts` (`Closure`, `openSlots`) ·
+`lib/scheduler/plan.ts` · `lib/vacation.ts` (+ tests) · `lib/planner.ts` ·
+`lib/scheduler/scheduler.test.ts` ("vacation").
+
+### TB-063 · Set, see and remove vacations on the Calendar
+*As a planner, I want to set a vacation from the Calendar and see it there, so
+that I can plan time away where I plan everything else.*
+
+Acceptance criteria
+- [x] **🏖 Set vacation** beside the view switcher opens a form below it: from,
+      until, windows (all ticked by default), note; upcoming vacations are
+      listed with **remove**.
+- [x] A vacation is a teal bar over its days; the closed windows' bands are
+      left out for its span.
+- [x] Clicking the bar opens it in the side panel with the closed windows and
+      **Delete vacation**.
+
+### TB-064 · A vacation is unmistakable, and editable
+*As a planner, I want a vacation drawn across its exact time span and editable
+from its panel, so that it is plain what falls inside it and easy to adjust.*
+
+Acceptance criteria
+- [x] The vacation's exact span is hatched red with a red outline over the time
+      grid, in front of events and blocks (clicks pass through), labelled
+      "VACATION" once on its tallest piece; its all-day bar is red too.
+- [x] **Edit dates, windows or note** in the panel reopens the form with the
+      current values (an end at midnight shows as 23:59 of the last day).
+
+Where to look: `lib/calendar/vacation-overlay.ts` (+ tests) · `time-grid.tsx`
+(`VacationHatch`) · `components/calendar/vacation-form.tsx`.
+
+### TB-065 · Clear what is scheduled during a vacation
+*As a planner, I want to see everything already scheduled during my vacation
+and pick what to delete, so that my calendar — Google included — is clear for
+the time away.*
+
+Acceptance criteria
+- [x] The panel lists every Google event (all calendars, hidden ones included)
+      and TimeBlock block overlapping the vacation's exact span — read for the
+      whole span, not just the week on screen — earliest first.
+- [x] Each has a checkbox (none ticked at first; *all* / *none*); read-only
+      calendars and blocks with ticked work cannot be ticked, and say why.
+- [x] **Delete N selected** asks first, deletes from Google Calendar (repeats:
+      that occurrence only) and TimeBlock; one failure does not stop the rest,
+      and each is reported.
+- [x] Saving a new vacation opens it in the panel at once (on the week it
+      starts, if that is not in view).
+
+Where to look: `lib/calendar/vacation-conflicts.ts` · `lib/calendar/overlap.ts`
+(+ tests) · `components/calendar/vacation-cleanup.tsx` · `app/actions/vacation.ts`
+(`deleteDuringVacationAction`) · `lib/google/sync.ts` (`deleteBlockEverywhere`).
+
+### TB-066 · Keep a vacation in Google Calendar
+*As a planner, I want to choose that a vacation also appears in Google
+Calendar, and have edits follow it there, so that I see my time away wherever I
+look at my calendar.*
+
+Acceptance criteria
+- [x] **Also show in Google Calendar** in the vacation form (new and edit); it
+      cannot be ticked without a Google connection.
+- [x] Saved ticked: an event in TimeBlock's own calendar — all-day for whole
+      days, else timed — titled "🏖 Vacation · note", listing the closed windows.
+- [x] Every save brings it in line: created, updated (re-created if deleted by
+      hand in Google), or removed when unticked; deleting the vacation removes it
+      first, so a refusal changes nothing.
+- [x] It carries a private `tbVacationId`: never busy for planning (the vacation
+      closes only its windows), not drawn twice, not offered in the vacation's
+      delete list.
+- [x] If Google cannot be reached, the vacation is still saved; the form and the
+      panel say it is not in Google yet, and saving again retries.
+
+Migration `0008_vacation_in_google` adds `vacations.in_google` and
+`vacations.google_event_id`.
+
+Where to look: `lib/google/vacation-event.ts` (+ tests) · `lib/google/sync.ts`
+(`syncVacationEvent`) · `app/actions/vacation.ts` · `lib/calendar/busy.ts`.
+
+Where to look: `components/calendar/vacation-button.tsx` ·
+`app/actions/vacation.ts` · `lib/calendar/bands.ts` (`windowBands`) ·
+`lib/calendar/load.ts` · `components/calendar/event-panel.tsx`.
 
 ---
 

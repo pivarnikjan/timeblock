@@ -2,6 +2,17 @@ import { DateTime } from 'luxon';
 import type { Settings } from '@/lib/db/schema';
 import { clamp, isEmpty, merge, minutes, pad, subtract, type Interval } from './intervals';
 
+/**
+ * A stretch during which one window does not apply — a vacation closing
+ * Learning and Work. `windowId: null` is work with no window (Anytime).
+ * UTC ISO instants, like busy spans.
+ */
+export interface Closure {
+  windowId: number | null;
+  start: string;
+  end: string;
+}
+
 /** The subset of settings that defines the shape of a working day. */
 export type DayShape = Pick<
   Settings,
@@ -105,4 +116,22 @@ export function freeSlots(
     .filter((i): i is Interval => i !== null);
 
   return subtract(within, blocked).filter((slot) => minutes(slot) >= shape.minBlockMin);
+}
+
+/** The closures that apply to one window. */
+export function closuresFor(closures: Closure[], windowId: number | null, zone: string): Interval[] {
+  return toIntervals(
+    closures.filter((c) => c.windowId === windowId),
+    zone,
+  );
+}
+
+/**
+ * Free slots with a window's closures taken out. Unlike a meeting, a closure
+ * gets no buffer: the window simply is not there, and opens again the minute
+ * the vacation ends. Slivers under `minBlockMin` are dropped as usual.
+ */
+export function openSlots(slots: Interval[], closed: Interval[], shape: DayShape): Interval[] {
+  if (closed.length === 0) return slots;
+  return slots.flatMap((slot) => subtract(slot, closed)).filter((slot) => minutes(slot) >= shape.minBlockMin);
 }

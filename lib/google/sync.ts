@@ -3,9 +3,11 @@ import { indexHorizons } from '@/lib/hierarchy';
 import * as blockRepo from '@/lib/repo/blocks';
 import { listAllHorizons } from '@/lib/repo/horizons';
 import { getSettings, updateSettings } from '@/lib/repo/settings';
+import type { Vacation } from '@/lib/db/schema';
 import { BLOCK_ID_KEY } from './calendar';
 import { calendarApi } from './client';
 import { eventContent } from './event-content';
+import { vacationEventBody } from './vacation-event';
 
 const CALENDAR_NAME = 'TimeBlock — Focus';
 
@@ -131,6 +133,18 @@ export async function commitFrom(from: string): Promise<CommitRangeResult> {
   return total;
 }
 
+/**
+ * Deletes a block that has no ticked work: its Google event first (so a
+ * refusal changes nothing), then the block. Its tasks are planned again later.
+ */
+export async function deleteBlockEverywhere(block: blockRepo.BlockWithSegments): Promise<void> {
+  if (block.state === 'done' || blockRepo.isLocked(block)) {
+    throw new Error('This block has ticked-off work, so it stays as a record of what was done.');
+  }
+  if (block.state === 'synced') await removeBlockEvent(block);
+  await blockRepo.deleteBlock(block.id);
+}
+
 /** Removes a committed block's event from TimeBlock's calendar (already gone is fine). */
 export async function removeBlockEvent(block: blockRepo.BlockWithSegments): Promise<void> {
   if (!block.googleEventId) return;
@@ -174,4 +188,37 @@ export async function clearDay(date: string): Promise<number> {
 function isMissing(error: unknown): boolean {
   const code = (error as { code?: number; status?: number })?.code ?? (error as { status?: number })?.status;
   return code === 404 || code === 410;
+}
+
+/**
+ * Brings a vacation's Google copy in line with it: created when wanted and
+ * missing, updated when wanted and present, removed when no longer wanted.
+ * Returns the event id to store (null when there is none). The copy lives in
+ * TimeBlock's own calendar, like blocks.
+ */
+export async function syncVacationEvent(v: Vacation, windowNames: string[]): Promise<string | null> {
+  if (!v.inGoogle) {
+    if (v.googleEventId) await deleteEvent(await ensureTargetCalendar(), v.googleEventId);
+    return null;
+  }
+  const settings = await getSettings();
+  const calendarId = await ensureTargetCalendar();
+  const requestBody = vacationEventBody(v, settings.timezone, windowNames);
+  if (v.googleEventId) {
+    try {
+      await calendarApi().events.update({ calendarId, eventId: v.googleEventId, requestBody });
+      return v.googleEventId;
+    } catch (error) {
+      // Deleted by hand in Google: make a new one below.
+      if (!isMissing(error)) throw error;
+    }
+  }
+  const { data } = await calendarApi().events.insert({ calendarId, requestBody });
+  if (!data.id) throw new Error('Google did not return an id for the vacation event');
+  return data.id;
+}
+
+/** Removes a vacation's Google copy, if it has one (already gone is fine). */
+export async function removeVacationEvent(v: Pick<Vacation, 'googleEventId'>): Promise<void> {
+  if (v.googleEventId) await deleteEvent(await ensureTargetCalendar(), v.googleEventId);
 }

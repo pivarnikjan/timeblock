@@ -1,11 +1,15 @@
 import Link from 'next/link';
 import { deleteEventAction, setEventMarkAction, toggleEventAction } from '@/app/actions/calendar';
 import { deleteBlockAction, unpinBlockAction } from '@/app/actions/plan';
+import { deleteVacationAction } from '@/app/actions/vacation';
 import { ConfirmButton } from '@/components/confirm-button';
 import { formatMinutes } from '@/lib/hierarchy';
 import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
+import type { Conflicts } from '@/lib/calendar/vacation-conflicts';
 import { calendarHref } from '@/lib/calendar/views';
 import { ToggleForm } from './toggle';
+import { VacationCleanup } from './vacation-cleanup';
+import { VacationForm } from './vacation-form';
 
 /**
  * The panel beside the calendar for the item that was clicked: what it is and
@@ -13,7 +17,7 @@ import { ToggleForm } from './toggle';
  * (always in Month) or a placeholder (planning may use its time), hidden, or
  * deleted; a TimeBlock block can be opened in its day, unpinned, or deleted.
  */
-export function EventPanel({ data, item }: { data: CalendarData; item: CalendarItem }) {
+export function EventPanel({ data, item, conflicts = null }: { data: CalendarData; item: CalendarItem; conflicts?: Conflicts | null }) {
   const close = calendarHref(data.range.view, data.range.anchor);
   return (
     <aside className="space-y-4 rounded-lg border border-border bg-surface p-4 text-sm lg:sticky lg:top-4 lg:self-start">
@@ -27,7 +31,13 @@ export function EventPanel({ data, item }: { data: CalendarData; item: CalendarI
 
       <p className="text-muted">{when(item)}</p>
 
-      {item.kind === 'event' ? <EventDetails data={data} item={item} close={close} /> : <BlockDetails item={item} close={close} />}
+      {item.kind === 'event' ? (
+        <EventDetails data={data} item={item} close={close} />
+      ) : item.kind === 'vacation' ? (
+        <VacationDetails data={data} item={item} close={close} conflicts={conflicts} />
+      ) : (
+        <BlockDetails item={item} close={close} />
+      )}
     </aside>
   );
 }
@@ -35,6 +45,11 @@ export function EventPanel({ data, item }: { data: CalendarData; item: CalendarI
 /** "Mon 28 Sep · 10:00 – 11:00", "All day · Mon 28 Sep", or a span of days. */
 function when(item: CalendarItem): string {
   const day = (dt: CalendarItem['start']) => dt.toFormat('ccc d LLL');
+  if (item.vacation) {
+    const { start, end } = item.vacation;
+    const endText = end.equals(end.startOf('day')) ? `${day(end.minus({ days: 1 }))} 24:00` : `${day(end)} ${end.toFormat('HH:mm')}`;
+    return `${day(start)} ${start.toFormat('HH:mm')} – ${endText}`;
+  }
   if (item.allDay) {
     const last = item.end.minus({ days: 1 });
     return item.start.hasSame(last, 'day') ? `All day · ${day(item.start)}` : `${day(item.start)} – ${day(last)}`;
@@ -191,6 +206,66 @@ function BlockDetails({ item, close }: { item: CalendarItem; close: string }) {
         ) : (
           <p className="text-xs text-muted">Has ticked-off work, so it stays as a record of what was done.</p>
         )}
+      </div>
+    </>
+  );
+}
+
+/** A vacation: the windows it closes, and a way to remove it. */
+function VacationDetails({
+  data,
+  item,
+  close,
+  conflicts,
+}: {
+  data: CalendarData;
+  item: CalendarItem;
+  close: string;
+  conflicts: Conflicts | null;
+}) {
+  const v = item.vacation!;
+  return (
+    <>
+      <div className="space-y-1 border-t border-border pt-3">
+        <p className="text-xs text-muted">Unavailable for</p>
+        <p>{v.windows.length > 0 ? v.windows.join(', ') : 'no windows'}</p>
+        <p className="text-xs text-muted">Nothing is planned in these windows while you are away; other windows work as usual.</p>
+        <p className="pt-1 text-xs">
+          {v.inGoogle && v.inGoogleNow
+            ? '📅 Also in Google Calendar (TimeBlock — Focus).'
+            : v.inGoogle
+              ? '📅 Meant to be in Google Calendar, but not there yet — save it again to retry.'
+              : 'Not in Google Calendar — tick “Also show in Google Calendar” under Edit to add it.'}
+        </p>
+      </div>
+
+      {conflicts && (
+        <div className="border-t border-border pt-3">
+          <VacationCleanup items={conflicts.items} problem={conflicts.problem} />
+        </div>
+      )}
+
+      <details className="border-t border-border pt-3">
+        <summary className="cursor-pointer text-xs font-medium text-muted hover:text-foreground">Edit dates, windows or note</summary>
+        <div className="pt-3">
+          <VacationForm
+            key={`${v.from}|${v.until}|${v.windowIds.join(',')}|${v.note ?? ''}|${v.inGoogle}`}
+            windows={data.windows}
+            initial={{ id: v.id, from: v.from, until: v.until, windowIds: v.windowIds, note: v.note, inGoogle: v.inGoogle }}
+            submitLabel="Save changes"
+            googleConnected={data.connection.status === 'connected'}
+          />
+        </div>
+      </details>
+
+      <div className="border-t border-border pt-3">
+        <form action={deleteVacationAction}>
+          <input type="hidden" name="id" value={v.id} />
+          <input type="hidden" name="returnTo" value={close} />
+          <ConfirmButton tone="danger" className="!px-0" confirm="Delete this vacation? Its windows open again for planning.">
+            Delete vacation
+          </ConfirmButton>
+        </form>
       </div>
     </>
   );

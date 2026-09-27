@@ -5,6 +5,8 @@ import { listCalendars, listRangeEvents, type CalendarEvent, type CalendarSummar
 import { connectionState, isMissingScopeError, MISSING_SCOPE_HELP, type ConnectionState } from '@/lib/google/client';
 import * as blockRepo from '@/lib/repo/blocks';
 import { listMarks } from '@/lib/repo/event-marks';
+import { listVacations, vacationsBetween } from '@/lib/repo/vacations';
+import { closedWindows, formInputs, vacationClosures } from '@/lib/vacation';
 import { getSettings, getCalendarFilters } from '@/lib/repo/settings';
 import { listWindows, toSpec } from '@/lib/repo/windows';
 import { nowIn } from '@/lib/time/periods';
@@ -16,7 +18,7 @@ import { calendarRange, visibleHours, type CalendarRange, type CalendarView } fr
 /** One thing drawn on the calendar — a Google event or a TimeBlock block. */
 export interface CalendarItem {
   id: string;
-  kind: 'event' | 'block';
+  kind: 'event' | 'block' | 'vacation';
   title: string;
   start: DateTime;
   end: DateTime;
@@ -52,6 +54,23 @@ export interface CalendarItem {
   important: boolean;
   /** Marked as a placeholder: planning may schedule work during it. */
   placeholder: boolean;
+  /** Vacations only: the exact span, the windows it closes, and its id. */
+  vacation: {
+    id: number;
+    start: DateTime;
+    end: DateTime;
+    /** Names of the windows it closes, for reading. */
+    windows: string[];
+    /** Their ids (null = Anytime), for the edit form. */
+    windowIds: (number | null)[];
+    note: string | null;
+    /** datetime-local values for the edit form. */
+    from: string;
+    until: string;
+    /** Wanted in Google Calendar, and whether its copy exists there yet. */
+    inGoogle: boolean;
+    inGoogleNow: boolean;
+  } | null;
   /** Blocks only: draft / synced / done, and the tasks inside. */
   blockState: 'draft' | 'synced' | 'done' | null;
   segments: { title: string; minutes: number; done: boolean }[];
@@ -74,6 +93,8 @@ export interface CalendarData {
   bands: Record<string, WindowBand[]>;
   /** Every time window with its colour, for the legend. */
   windows: WindowLegend[];
+  /** Vacations not over yet, for the Set vacation form's list. */
+  upcomingVacations: { id: number; label: string; startDate: string }[];
   connection: ConnectionState;
   problem: string | null;
   settings: Settings;
@@ -115,10 +136,14 @@ export async function loadCalendarView(view: CalendarView, anchor: string, selec
   const afterLast = DateTime.fromISO(last, { zone }).plus({ days: 1 }).toISODate()!;
 
   const connection = connectionState();
-  const [{ events, calendars, problem }, blocks, marks] = await Promise.all([
+  const rangeStart = DateTime.fromISO(first, { zone }).toUTC().toISO()!;
+  const rangeEnd = DateTime.fromISO(afterLast, { zone }).toUTC().toISO()!;
+  const [{ events, calendars, problem }, blocks, marks, away, upcoming] = await Promise.all([
     loadEvents(first, afterLast, zone, connection),
     blockRepo.listForRange(first, last),
     listMarks(),
+    vacationsBetween(rangeStart, rangeEnd),
+    listVacations(nowIn(zone).toUTC().toISO()!),
   ]);
 
   // TimeBlock's own calendar is represented by its local blocks (which also
@@ -130,7 +155,8 @@ export async function loadCalendarView(view: CalendarView, anchor: string, selec
   const items: CalendarItem[] = [];
 
   for (const e of events) {
-    if (e.blockId !== null || e.calendarId === own) continue;
+    // TimeBlock's own events (blocks, vacation copies) are drawn from local data instead.
+    if (e.blockId !== null || e.vacationId !== null || e.calendarId === own) continue;
     const start = DateTime.fromISO(e.start).setZone(zone);
     const end = DateTime.fromISO(e.end).setZone(zone);
     const multiDay = isMultiDay(start, end, e.allDay);
@@ -167,6 +193,7 @@ export async function loadCalendarView(view: CalendarView, anchor: string, selec
       placeholder: mark?.placeholder ?? false,
       blockState: null,
       segments: [],
+      vacation: null,
     });
   }
 
@@ -202,13 +229,42 @@ export async function loadCalendarView(view: CalendarView, anchor: string, selec
       placeholder: false,
       blockState: b.state === 'cancelled' ? 'done' : b.state,
       segments: b.segments.map((s) => ({ title: s.task.title, minutes: s.minutes, done: s.doneAt !== null })),
+      vacation: null,
+    });
+  }
+
+  const windowName = new Map<number | null, string>([...windows.map((w) => [w.id, w.name] as const), [null, 'Anytime']]);
+  for (const v of away) {
+    const start = DateTime.fromISO(v.startsAt).setZone(zone);
+    const end = DateTime.fromISO(v.endsAt).setZone(zone);
+    // Drawn as a bar over the whole days it touches; the exact times are in the panel.
+    const barStart = start.startOf('day');
+    const barEnd = end.minus({ milliseconds: 1 }).startOf('day').plus({ days: 1 });
+    items.push({
+      ...VACATION_BASE,
+      id: `vacation:${v.id}`,
+      title: `Vacation${v.note ? ` · ${v.note}` : ''}`,
+      start: barStart,
+      end: barEnd,
+      multiDay: barEnd.diff(barStart, 'days').days > 1,
+      vacation: {
+        id: v.id,
+        start,
+        end,
+        windows: closedWindows(v).map((id) => windowName.get(id) ?? 'a deleted window'),
+        windowIds: closedWindows(v),
+        note: v.note,
+        ...formInputs(start, end),
+        inGoogle: v.inGoogle,
+        inGoogleNow: v.googleEventId !== null,
+      },
     });
   }
 
   items.sort((a, b) => a.start.toMillis() - b.start.toMillis());
 
   const specs = windows.map((w) => ({ ...toSpec(w), id: w.id, color: w.color }));
-  const bands = windowBands(range.days, specs, zone);
+  const bands = windowBands(range.days, specs, zone, vacationClosures(away));
 
   return {
     view,
@@ -224,9 +280,51 @@ export async function loadCalendarView(view: CalendarView, anchor: string, selec
     filters,
     bands,
     windows: windowLegend(specs),
+    upcomingVacations: upcoming.map((v) => ({
+      id: v.id,
+      label: vacationLabel(v.startsAt, v.endsAt, zone, v.note),
+      startDate: DateTime.fromISO(v.startsAt).setZone(zone).toISODate()!,
+    })),
     connection,
     problem,
     settings,
     selected,
   };
+}
+
+const VACATION_COLOR = '#E53935'; // the red of the hatching drawn over the vacation on the grid
+
+/** The fields every vacation bar shares. */
+const VACATION_BASE = {
+  kind: 'vacation',
+  allDay: true,
+  color: VACATION_COLOR,
+  textColor: textOn(VACATION_COLOR),
+  declined: false,
+  draft: false,
+  calendarId: null,
+  hideKey: null,
+  planDate: null,
+  blockId: null,
+  movable: false,
+  pinned: false,
+  eventId: null,
+  calendarName: null,
+  writable: false,
+  recurring: false,
+  htmlLink: null,
+  important: false,
+  placeholder: false,
+  blockState: null,
+  segments: [],
+} as const satisfies Partial<CalendarItem>;
+
+/** "Mon 12 Oct 00:00 – Fri 16 Oct 24:00 · Crete", readable in a list. */
+export function vacationLabel(startsAt: string, endsAt: string, zone: string, note: string | null): string {
+  const start = DateTime.fromISO(startsAt).setZone(zone);
+  const end = DateTime.fromISO(endsAt).setZone(zone);
+  const endText = end.equals(end.startOf('day'))
+    ? `${end.minus({ days: 1 }).toFormat('ccc d LLL')} 24:00`
+    : end.toFormat('ccc d LLL HH:mm');
+  return `${start.toFormat('ccc d LLL HH:mm')} – ${endText}${note ? ` · ${note}` : ''}`;
 }
