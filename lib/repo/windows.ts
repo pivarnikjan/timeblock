@@ -4,8 +4,12 @@ import { db } from '@/lib/db/client';
 import { horizons, settings, tasks, timeWindows, type NewTimeWindow, type TimeWindow } from '@/lib/db/schema';
 import type { WindowSpec } from '@/lib/scheduler/day';
 
+/** Time windows earliest first — the order Settings, the Calendar legend and the planner use. */
 export async function listWindows(): Promise<TimeWindow[]> {
-  return db().select().from(timeWindows).orderBy(asc(timeWindows.sortOrder), asc(timeWindows.id));
+  return db()
+    .select()
+    .from(timeWindows)
+    .orderBy(asc(timeWindows.startTime), asc(timeWindows.endTime), asc(timeWindows.name), asc(timeWindows.id));
 }
 
 export function toSpec(w: TimeWindow): WindowSpec {

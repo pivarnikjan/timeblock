@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { windowBands, windowLegend } from './bands';
-import { calendarColor, energyColor, eventColor, parseHexColor, textOn, WINDOW_PALETTE, windowColor } from './colors';
+import { calendarColor, energyColor, eventColor, parseHexColor, textOn, WINDOW_PALETTE, windowColor, windowColors } from './colors';
 import { eventKey, isHidden, parseFilters } from './filters';
 import { layoutColumns, layoutLanes } from './layout';
 import { calendarRange, parseView, visibleHours } from './views';
@@ -146,6 +146,14 @@ describe('hiding', () => {
     expect(eventKey({ calendarId: 'primary', seriesId: 'breakfast' })).toBe('primary|breakfast');
   });
 
+  it('applies "only multi-day events" in Month alone, ignoring choices stored for hour views', () => {
+    const stored = parseFilters(JSON.stringify({ multiDayOnly: ['week', 'day', 'month'] }));
+
+    expect(isHidden(event({}), stored, 'week')).toBe(false);
+    expect(isHidden(event({}), stored, 'day')).toBe(false);
+    expect(isHidden(event({}), stored, 'month')).toBe(true);
+  });
+
   it('carries over choices saved when these switches greyed items out', () => {
     const legacy = parseFilters(JSON.stringify({ greyCalendars: ['wizz'], greyPlan: true, greyEvents: { 'a|b': 'Obed' } }));
 
@@ -193,5 +201,28 @@ describe('time windows on the calendar', () => {
     expect(parseFilters('{}').windowsInFront).toBe(false);
     expect(parseFilters(JSON.stringify({ windowsInFront: true })).windowsInFront).toBe(true);
     expect(parseFilters(JSON.stringify({ windowsInFront: 'yes' })).windowsInFront).toBe(false);
+  });
+});
+
+describe('time window order', () => {
+  // Created in this order (ids), shown by start time.
+  const learning = { id: 1, name: 'Learning', start: '10:30', end: '14:00', weekdays: [1, 2, 3, 4, 5], color: null };
+  const work = { id: 2, name: 'Work', start: '14:00', end: '17:30', weekdays: [1, 2, 3, 4, 5], color: null };
+  const training = { id: 3, name: 'Training', start: '08:15', end: '10:00', weekdays: [1, 2, 3, 4, 5], color: null };
+  const family = { id: 4, name: 'Family', start: '18:00', end: '21:00', weekdays: [1, 2, 3, 4, 5], color: '#abcdef' };
+
+  it('lists windows by start time, whatever order they were created in', () => {
+    expect(windowLegend([learning, work, training, family]).map((w) => w.name)).toEqual(['Training', 'Learning', 'Work', 'Family']);
+  });
+
+  it('keeps each window its colour when the list is re-sorted', () => {
+    const colors = windowColors([training, family, work, learning]);
+
+    // Palette colours follow creation order, so Learning keeps the first colour though Training is listed first.
+    expect(colors.get(1)).toBe(WINDOW_PALETTE[0]);
+    expect(colors.get(2)).toBe(WINDOW_PALETTE[1]);
+    expect(colors.get(3)).toBe(WINDOW_PALETTE[2]);
+    expect(colors.get(4)).toBe('#abcdef');
+    expect(windowLegend([training, learning]).find((w) => w.id === 1)!.color).toBe(WINDOW_PALETTE[0]);
   });
 });

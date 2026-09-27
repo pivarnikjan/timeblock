@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { parseView, VIEWS } from '@/lib/calendar/views';
+import { VIEWS } from '@/lib/calendar/views';
 import { enumOf, str } from '@/lib/forms';
 import { updateCalendarFilters, updateSettings } from '@/lib/repo/settings';
 
@@ -52,14 +52,12 @@ export async function toggleEventAction(form: FormData): Promise<void> {
   refresh();
 }
 
-/** "Only multi-day events" — remembered per view. */
+/** "Only multi-day events" — a Month switch, for condensed days. */
 export async function toggleMultiDayOnlyAction(form: FormData): Promise<void> {
-  const view = parseView(form.get('view'));
-  if (!view) return;
   const on = form.get('on') === '1';
   await updateCalendarFilters((f) => ({
     ...f,
-    multiDayOnly: on ? [...new Set([...f.multiDayOnly, view])] : f.multiDayOnly.filter((v) => v !== view),
+    multiDayOnly: on ? ['month'] : [],
   }));
   refresh();
 }

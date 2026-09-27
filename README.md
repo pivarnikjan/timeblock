@@ -45,6 +45,10 @@ Year goal          CIS-ITSM Certification                  ⏱ Learning (inherit
 
 ## The planning rhythm
 
+The top navigation is **Calendar · Planning · Tasks · Settings**. **Planning**
+holds the Week, Month and Year screens behind one tab bar (their addresses stay
+`/week`, `/month`, `/year`; switching keeps the date you are looking at).
+
 | Screen | Cadence | What you do there |
 | --- | --- | --- |
 | `/year` | Once a year | Set the 40,000ft goals. Expand one to drill down through its months, weeks and tasks, each with a progress bar and forecast. |
@@ -83,11 +87,14 @@ to an hour before now, like Google.
 **Time windows are coloured bands.** Each window (Learning, Work…) is drawn in
 its own colour with a stripe down its left edge, and its name appears once per
 view — on the first day it opens — instead of on every day. The left panel's
-**Time windows** legend lists each window with its colour and hours. Tick
+**Time windows** legend lists each window with its colour and hours, earliest
+first (Settings lists them in the same order, and the planner fills them in it). Tick
 **Show in front** to draw the bands and their names over the blocks (clicks and
 drags still reach the blocks); untick to send them back behind. Set a window's
 colour in **Settings → Time windows**; windows without one get distinct
-defaults (Learning green, Work orange) that never match a block's colour.
+defaults (Learning green, Work orange) that never match a block's colour. A
+default follows the order windows were created in, so adding an earlier window
+never recolours the others.
 
 **Colours are Google's.** An event uses its own colour if it has one, else its
 calendar's — mapped to the palette Google Calendar's web app shows (the API
@@ -107,9 +114,9 @@ so a busy month becomes readable:
   every breakfast is gone).
 - **Hidden events** (left panel, and Settings → Calendar) lists them, each with
   **show** to bring it back.
-- **Only multi-day events**: shows only events that span several days — e.g. in
-  Month view to see trips, holidays and conferences at a glance. Remembered
-  separately for each view.
+- **Only multi-day events** (Month view only): shows only events that span
+  several days, to see trips, holidays and conferences at a glance. Views with
+  hours always show their timed events.
 
 ## How a day is planned
 

@@ -37,7 +37,7 @@ const COPY: Record<ReviewLevel, { title: string; subtitle: string; noun: string 
   },
   week: {
     title: 'Week',
-    subtitle: 'The few priorities this week is about. Tasks under them are scheduled automatically from Monday.',
+    subtitle: 'The few priorities this week is about. Tasks under them are scheduled as soon as there is room — the week is their deadline.',
     noun: 'weekly priority',
   },
 };

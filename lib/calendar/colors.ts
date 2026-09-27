@@ -108,6 +108,16 @@ export function windowColor(color: string | null | undefined, index: number): st
   return WINDOW_PALETTE[((index % WINDOW_PALETTE.length) + WINDOW_PALETTE.length) % WINDOW_PALETTE.length];
 }
 
+/**
+ * Every window's colour, keyed by id. Palette colours follow the order windows
+ * were created (their ids), not the order they are shown in, so sorting or
+ * editing a window's hours never recolours the others.
+ */
+export function windowColors(windows: { id: number; color: string | null }[]): Map<number, string> {
+  const byCreation = [...windows].sort((a, b) => a.id - b.id);
+  return new Map(byCreation.map((w, i) => [w.id, windowColor(w.color, i)]));
+}
+
 /** `#rrggbb` from a form, or null for anything else (the palette then applies). */
 export function parseHexColor(value: unknown): string | null {
   return typeof value === 'string' && HEX.test(value.trim()) ? value.trim().toLowerCase() : null;

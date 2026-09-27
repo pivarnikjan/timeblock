@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-09-27 | v0.5.1 | [E14 · Readable time windows](#e14--readable-time-windows) | TB-054 – TB-056 (changes) | Done |
 | 2026-09-27 | v0.5 | [E14 · Readable time windows](#e14--readable-time-windows) | TB-051 – TB-053 | Done |
 | 2026-09-27 | v0.4.1 | [E13 · Plan the whole calendar](#e13--plan-the-whole-calendar) | TB-050 (change) | Done |
 | 2026-09-27 | v0.4 | [E13 · Plan the whole calendar](#e13--plan-the-whole-calendar) | TB-047 – TB-049 | Done |
@@ -77,6 +78,40 @@ Acceptance criteria
 - [x] Settings → Calendar has a checkbox per Google calendar (TimeBlock's own
       calendar excluded); unticked calendars are hidden as before.
 - [x] The left panel shows "N of M shown · choose", linking there.
+
+### TB-054 · Windows sorted by start time *(change, 2026-09-27)*
+*As a planner, I want time windows listed by when they start, so that Settings
+and the Calendar legend read like my day.*
+
+Acceptance criteria
+- [x] Settings, the Calendar legend and the planner order windows by start
+      time, then end time, then name.
+- [x] Default colours follow creation order, so re-sorting or adding an earlier
+      window never recolours the others.
+
+Where to look: `lib/repo/windows.ts` (`listWindows`) · `lib/scheduler/day.ts`
+(`compareWindows`) · `lib/calendar/colors.ts` (`windowColors`, + tests).
+
+### TB-055 · "Only multi-day events" is a Month switch *(change, 2026-09-27)*
+*As a planner, I want the multi-day switch only where days are condensed, so
+that views with hours are not cluttered by a switch that makes no sense there.*
+
+Acceptance criteria
+- [x] The switch appears in Month only; Today, 3 days, Work week and Week always
+      show timed events, even if the switch was saved for them earlier.
+
+### TB-056 · Planning tab *(change, 2026-09-27)*
+*As a planner, I want Week, Month and Year under one Planning tab, so that the
+top navigation separates planning the work from putting it in the calendar.*
+
+Acceptance criteria
+- [x] Top navigation: Calendar · Planning · Tasks · Settings, the current
+      section highlighted.
+- [x] Planning shows Week · Month · Year tabs, opens on Week, and keeps the date
+      when switching; `/week`, `/month`, `/year` keep working.
+
+Where to look: `app/(planning)/layout.tsx` · `components/planning-tabs.tsx` ·
+`components/main-nav.tsx` · `app/planning/page.tsx`.
 
 ### TB-053 · Week by default
 *As a planner, I want the Calendar to open in Week, and to choose that default

@@ -1,6 +1,6 @@
 import type { DateTime } from 'luxon';
-import { windowInterval, windowOpensOn, type WindowSpec } from '@/lib/scheduler/day';
-import { windowColor } from './colors';
+import { compareWindows, windowInterval, windowOpensOn, type WindowSpec } from '@/lib/scheduler/day';
+import { windowColors } from './colors';
 
 /** A time window as the Calendar draws and lists it. */
 export interface WindowLegend {
@@ -25,9 +25,12 @@ export interface WindowBand {
   labelled: boolean;
 }
 
-/** Windows in display order, each with its resolved colour. */
+/** Windows earliest first, each with its resolved colour. */
 export function windowLegend(windows: (WindowSpec & { id: number; color: string | null })[]): WindowLegend[] {
-  return windows.map((w, i) => ({ id: w.id, name: w.name, start: w.start, end: w.end, color: windowColor(w.color, i) }));
+  const colors = windowColors(windows);
+  return [...windows]
+    .sort(compareWindows)
+    .map((w) => ({ id: w.id, name: w.name, start: w.start, end: w.end, color: colors.get(w.id)! }));
 }
 
 /** The bands for every visible day, labelling each window once. */

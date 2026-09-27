@@ -10,7 +10,7 @@ import {
 import { restoreEventsAction, toggleCalendarAction, updateCalendarSettingsAction } from '@/app/actions/calendar';
 import { ToggleForm } from '@/components/calendar/toggle';
 import { CsvImportForm } from '@/components/csv-import-form';
-import { windowColor, WINDOW_PALETTE } from '@/lib/calendar/colors';
+import { WINDOW_PALETTE, windowColors } from '@/lib/calendar/colors';
 import { parseFilters } from '@/lib/calendar/filters';
 import { VIEW_LABEL, VIEWS } from '@/lib/calendar/views';
 import type { Settings, TimeWindow } from '@/lib/db/schema';
@@ -72,6 +72,7 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
   const [settings, windows] = await Promise.all([getSettings(), listWindows()]);
   const connection = connectionState();
   const calendars = connection.status === 'connected' ? await readCalendars(settings.targetCalendarId) : null;
+  const colors = windowColors(windows);
 
   const error = typeof params.error === 'string' ? params.error : null;
   const reason = typeof params.reason === 'string' ? params.reason : null;
@@ -241,8 +242,8 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
         </p>
 
         <div className="mt-4 space-y-3">
-          {windows.map((w, i) => (
-            <WindowRow key={w.id} window={w} color={windowColor(w.color, i)} />
+          {windows.map((w) => (
+            <WindowRow key={w.id} window={w} color={colors.get(w.id)!} />
           ))}
         </div>
 
