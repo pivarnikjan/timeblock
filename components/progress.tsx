@@ -67,6 +67,7 @@ export function OutlookBadge({ outlook }: { outlook: HorizonOutlook | undefined 
     'on-track': 'border-border text-muted',
     'at-risk': 'border-red-500/40 bg-red-500/5 text-red-500',
     unscheduled: 'border-amber-500/40 text-amber-600',
+    upcoming: 'border-border text-muted',
     empty: '',
   };
 
@@ -75,8 +76,10 @@ export function OutlookBadge({ outlook }: { outlook: HorizonOutlook | undefined 
       ? 'done'
       : outlook.status === 'finished'
         ? 'all planned work finished'
-        : outlook.status === 'on-track'
-          ? `on track · done by ${day(outlook.finish)}${
+        : outlook.status === 'upcoming'
+          ? `starts ${day(outlook.starts)}`
+          : outlook.status === 'on-track'
+          ? `${outlook.runsTo ? `on track so far · runs to ${day(outlook.runsTo)}` : `on track · done by ${day(outlook.finish)}`}${
               outlook.unplanned > 0 ? ` · ${outlook.unplanned} below with nothing planned yet` : ''
             }`
           : outlook.status === 'unscheduled'

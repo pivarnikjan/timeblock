@@ -4,8 +4,17 @@ import { DateTime } from 'luxon';
 import { revalidatePath } from 'next/cache';
 import { num, str } from '@/lib/forms';
 import { redirect } from 'next/navigation';
-import { clearDay, commitDay, commitFrom, deleteBlockEverywhere, moveEvent, type CommitRangeResult } from '@/lib/google/sync';
-import { generateDay, planCalendar, today, type CalendarPlanSummary } from '@/lib/planner';
+import { clearDay, commitDay, syncBlockColors, commitFrom, deleteBlockEverywhere, moveEvent, type CommitRangeResult } from '@/lib/google/sync';
+import {
+  generateDay,
+  planCalendar,
+  previewReschedule,
+  reschedule,
+  today,
+  type CalendarPlanSummary,
+  type RescheduleResult,
+  type RescheduleSummary,
+} from '@/lib/planner';
 import * as blockRepo from '@/lib/repo/blocks';
 import { completeRitual } from '@/lib/repo/rituals';
 import { getSettings } from '@/lib/repo/settings';
@@ -24,6 +33,7 @@ export async function generatePlanAction(form: FormData): Promise<void> {
 export async function commitPlanAction(form: FormData): Promise<void> {
   const date = str(form, 'date');
   await commitDay(date);
+  await syncBlockColors(date);
   await completeRitual('daily', date);
   refresh();
 }
@@ -70,20 +80,27 @@ export type PlanCalendarState =
   | { kind: 'planned'; summary: CalendarPlanSummary }
   | { kind: 'committed'; result: CommitRangeResult }
   | { kind: 'discarded'; blocks: number }
+  | { kind: 'reschedule-preview'; summary: RescheduleSummary }
+  | { kind: 'rescheduled'; result: RescheduleResult }
   | { kind: 'error'; message: string };
 
 /**
- * The Calendar's plan bar: one form, three buttons. "plan" lays every task
+ * The Calendar's plan bar: one form, several buttons. "plan" lays every task
  * out from today on as drafts; "commit" sends those drafts to Google;
  * "discard" throws the drafts away (blocks placed by hand included).
+ * "reschedule-preview" counts the tasks a reschedule would move, "reschedule"
+ * (the confirmation) moves them, and "cancel" drops the preview.
  */
 export async function planCalendarAction(_prev: PlanCalendarState, form: FormData): Promise<PlanCalendarState> {
   const intent = form.get('intent');
   try {
     const from = today(await getSettings());
     let state: PlanCalendarState;
+    if (intent === 'cancel') return { kind: 'idle' };
+    if (intent === 'reschedule-preview') return { kind: 'reschedule-preview', summary: await previewReschedule() };
     if (intent === 'commit') state = { kind: 'committed', result: await commitFrom(from) };
     else if (intent === 'discard') state = { kind: 'discarded', blocks: await blockRepo.deleteDraftsFrom(from) };
+    else if (intent === 'reschedule') state = { kind: 'rescheduled', result: await reschedule() };
     else state = { kind: 'planned', summary: await planCalendar() };
     refresh();
     return state;

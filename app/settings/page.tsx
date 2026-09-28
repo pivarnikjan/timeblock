@@ -3,6 +3,7 @@ import {
   createWindowAction,
   deleteWindowAction,
   disconnectGoogleAction,
+  recolourGoogleAction,
   setDefaultWindowAction,
   updateDayShapeAction,
   updateWindowAction,
@@ -77,6 +78,12 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
   const error = typeof params.error === 'string' ? params.error : null;
   const reason = typeof params.reason === 'string' ? params.reason : null;
   const connected = params.connected === '1';
+  const recolour =
+    typeof params.colorError === 'string'
+      ? ({ kind: 'error', message: params.colorError } as const)
+      : typeof params.recoloured === 'string'
+        ? ({ kind: 'done', recoloured: Number(params.recoloured) || 0, byHand: Number(params.byHand) || 0 } as const)
+        : null;
 
   return (
     <div className="space-y-6">
@@ -279,6 +286,29 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
           </Field>
           <Button type="submit">Save</Button>
         </form>
+
+        {connection.status === 'connected' && (
+          <form action={recolourGoogleAction} className="mt-4 space-y-2 border-t border-border pt-4">
+            <p className="text-xs text-muted">
+              Blocks take their window&apos;s colour in Google Calendar too (the nearest of Google&apos;s colours) —
+              except an event whose colour you changed in Google, which keeps it. Changing a window&apos;s colour here
+              repaints its blocks there.
+            </p>
+            <Button type="submit">Apply window colours in Google Calendar</Button>
+            {recolour?.kind === 'error' && (
+              <p className="text-xs text-red-500">Google Calendar could not be updated: {recolour.message}</p>
+            )}
+            {recolour?.kind === 'done' && (
+              <p className="text-xs text-emerald-600">
+                {recolour.recoloured === 0
+                  ? "Every TimeBlock event in Google already has its window's colour."
+                  : `${plural(recolour.recoloured, 'event')} given ${recolour.recoloured === 1 ? 'its' : 'their'} window's colour in Google Calendar.`}
+                {recolour.byHand > 0 &&
+                  ` ${plural(recolour.byHand, 'event')} kept the colour you chose in Google.`}
+              </p>
+            )}
+          </form>
+        )}
       </Card>
 
       <Card>
@@ -294,6 +324,8 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
     </div>
   );
 }
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 

@@ -90,3 +90,13 @@ export function forecast(
   const { from: f, to, finishes, leftover } = planRange(from, days, shape, windows, tasks, busyByDate, closures);
   return { from: f, to, finishes, leftover };
 }
+
+/**
+ * Tasks that cannot start before the range ends — dated work further out, like
+ * next spring's workouts. They are not "won't fit": they are simply later, and
+ * get planned once their dates come within reach.
+ */
+export function dueAfter(tasks: Pick<ForecastTask, 'id' | 'availableFrom'>[], from: string, days: number, zone: string): Map<number, string> {
+  const last = DateTime.fromISO(from, { zone }).plus({ days: days - 1 }).toISODate()!;
+  return new Map(tasks.filter((t) => t.availableFrom !== null && t.availableFrom > last).map((t) => [t.id, t.availableFrom!]));
+}

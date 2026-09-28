@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import type { Horizon, Settings, Task, TimeWindow } from '@/lib/db/schema';
 import { busySpans, listDayEvents, listRangeEvents, type CalendarEvent } from '@/lib/google/calendar';
 import { connectionState, isMissingScopeError, MISSING_SCOPE_HELP, type ConnectionState } from '@/lib/google/client';
+import { commitBlocks, removeBlockEvents, syncBlockColors } from '@/lib/google/sync';
 import {
   availability,
   computeProgress,
@@ -35,9 +36,10 @@ import {
   type DayShape,
   type WindowSpec,
 } from '@/lib/scheduler/day';
-import { forecast, planRange, type ForecastTask } from '@/lib/scheduler/forecast';
+import { dueAfter, forecast, planRange, type ForecastTask } from '@/lib/scheduler/forecast';
 import type { Interval } from '@/lib/scheduler/intervals';
 import { planDay, type Plan, type PlannableTask } from '@/lib/scheduler/plan';
+import { conflictOf, diffBlocks } from '@/lib/scheduler/reschedule';
 import { nowIn } from '@/lib/time/periods';
 import { vacationClosures } from '@/lib/vacation';
 
@@ -153,14 +155,31 @@ function reservedSpans(ctx: PlanningContext, date: string, blocks: blockRepo.Blo
     .filter((b) => b.date === date && blockRepo.isFixed(b))
     .map((b) => ({ start: b.startsAt, end: b.endsAt }));
 
-  if (date === today(ctx.settings)) {
-    const now = nowIn(ctx.settings.timezone);
-    const dayStart = atLocalTime(date, '00:00', ctx.settings.timezone);
-    // Round up to the next 5 minutes so a re-plan never starts "a moment ago".
-    const from = now.plus({ minutes: 5 - (now.minute % 5) }).startOf('minute');
-    spans.push({ start: dayStart.toUTC().toISO()!, end: from.toUTC().toISO()! });
-  }
+  if (date === today(ctx.settings)) spans.push(beforeNow(ctx.settings));
   return spans;
+}
+
+/**
+ * Today up to now, rounded up to the next 5 minutes so a re-plan never starts
+ * "a moment ago". Like any busy span it is padded by the break, so new work
+ * starts no earlier than `end` + `bufferMin`.
+ */
+function beforeNow(settings: Settings): BusySpan {
+  const now = nowIn(settings.timezone);
+  const dayStart = atLocalTime(today(settings), '00:00', settings.timezone);
+  const from = now.plus({ minutes: 5 - (now.minute % 5) }).startOf('minute');
+  return { start: dayStart.toUTC().toISO()!, end: from.toUTC().toISO()! };
+}
+
+/** Every task a calendar-wide plan may place from `from` on, dated ones with the day they open. */
+function forecastableFrom(ctx: PlanningContext, from: string): ForecastTask[] {
+  const out: ForecastTask[] = [];
+  for (const task of ctx.tasks) {
+    const when = availability(task, ctx.byId);
+    if (when.kind === 'never') continue;
+    out.push({ ...toPlannable(task, ctx), availableFrom: when.kind === 'from' && when.date > from ? when.date : null });
+  }
+  return out;
 }
 
 /**
@@ -216,6 +235,8 @@ export interface CalendarPlanSummary {
   tasksPlaced: number;
   /** Tasks with minutes that did not fit before the planning horizon ran out. */
   unfinished: { title: string; minutes: number }[];
+  /** Dated tasks due after the horizon — planned when their dates come closer. */
+  later: { count: number; until: string | null };
   /** Open tasks nobody asked to schedule: month backlogs and loose tasks. */
   notScheduled: number;
   /** Blocks placed by hand that the plan worked around. */
@@ -276,15 +297,7 @@ export async function planCalendar(): Promise<CalendarPlanSummary> {
     busyByDate.set(date, [...(busyByDate.get(date) ?? []), ...reservedSpans(ctx, date, blocks)]);
   }
 
-  const forecastable: ForecastTask[] = [];
-  for (const task of ctx.tasks) {
-    const when = availability(task, ctx.byId);
-    if (when.kind === 'never') continue;
-    forecastable.push({
-      ...toPlannable(task, ctx),
-      availableFrom: when.kind === 'from' && when.date > from ? when.date : null,
-    });
-  }
+  const forecastable = forecastableFrom(ctx, from);
   const tasks = withoutPinned(forecastable, pinnedMinutes(blocks, from));
 
   const plan = planRange(from, PLAN_CALENDAR_DAYS, ctx.shape, ctx.specs, tasks, busyByDate, ctx.closures);
@@ -294,6 +307,7 @@ export async function planCalendar(): Promise<CalendarPlanSummary> {
   );
 
   const segments = plan.days.flatMap((d) => d.blocks.flatMap((b) => b.segments));
+  const notYet = dueAfter(tasks, from, PLAN_CALENDAR_DAYS, zone);
   const titleOf = new Map(ctx.tasks.map((t) => [t.id, t.title]));
   const offered = new Set(forecastable.map((t) => t.id));
 
@@ -305,7 +319,10 @@ export async function planCalendar(): Promise<CalendarPlanSummary> {
     days: plan.days.length,
     plannedMinutes: segments.reduce((n, s) => n + s.minutes, 0),
     tasksPlaced: new Set(segments.map((s) => s.taskId)).size,
-    unfinished: [...plan.leftover].map(([id, minutes]) => ({ title: titleOf.get(id) ?? `#${id}`, minutes })),
+    unfinished: [...plan.leftover]
+      .filter(([id]) => !notYet.has(id))
+      .map(([id, minutes]) => ({ title: titleOf.get(id) ?? `#${id}`, minutes })),
+    later: { count: notYet.size, until: [...notYet.values()].sort().at(-1) ?? null },
     notScheduled: ctx.tasks.filter(
       (t) =>
         (t.status === 'backlog' || t.status === 'active') &&
@@ -317,13 +334,177 @@ export async function planCalendar(): Promise<CalendarPlanSummary> {
   };
 }
 
+// ── Reschedule ──────────────────────────────────────────────────────────────
+
+/** What "Reschedule" would change (the preview), or changed. */
+export interface RescheduleSummary {
+  /** Tasks whose blocks move, earliest change first. */
+  impacted: { id: number; title: string }[];
+  /** Planned blocks a meeting (or, for a block the planner placed, a vacation) now sits on. */
+  conflicts: number;
+  /** Of those, blocks placed by hand: they move because a meeting took their place. */
+  released: number;
+  /** Blocks taken off the calendar, blocks put in their place, and blocks left exactly where they are. */
+  removed: number;
+  added: number;
+  kept: number;
+  /** First day that changes. */
+  firstChange: string | null;
+  /** The new blocks go straight to Google Calendar, because the plan they replace is there. */
+  toGoogle: boolean;
+  /** Tasks with minutes that no longer fit within the next three months. */
+  unfinished: { title: string; minutes: number }[];
+  problem: string | null;
+}
+
+export interface RescheduleResult extends RescheduleSummary {
+  /** Events created in Google Calendar. */
+  created: number;
+}
+
+interface RescheduleProposal {
+  /** Today: the first day the reschedule looks at. */
+  from: string;
+  summary: RescheduleSummary;
+  removed: blockRepo.BlockWithSegments[];
+  added: (blockRepo.DraftBlock & { date: string })[];
+}
+
+/**
+ * Recomputes the plan from now on around everything the calendar holds today —
+ * new meetings, vacations, blocks moved by hand — and compares it with the
+ * plan already there.
+ *
+ * What stays put: ticked-off work, blocks placed by hand, and blocks already
+ * under way (they start before the next re-plan could) — unless a meeting now
+ * sits on them. Everything else is planned again, and a block that comes out
+ * identical is kept as it is, Google event and all. Since courses run in order,
+ * one displaced block usually moves the ones after it: that cascade is exactly
+ * what the reschedule takes off your hands.
+ */
+async function proposeReschedule(): Promise<RescheduleProposal> {
+  const ctx = await loadContext();
+  const { settings } = ctx;
+  const zone = settings.timezone;
+  const from = today(settings);
+  const until = DateTime.fromISO(from, { zone }).plus({ days: PLAN_CALENDAR_DAYS }).toISODate()!;
+
+  const [calendar, blocks] = await Promise.all([loadRangeBusy(from, until, settings), blockRepo.listFrom(from)]);
+
+  // A block starting before new work could (now + the break) is under way: it stays unless it collides.
+  const now = beforeNow(settings);
+  const underWay = DateTime.fromISO(now.end).plus({ minutes: settings.bufferMin }).toMillis();
+
+  const staying: blockRepo.BlockWithSegments[] = [];
+  const movable: blockRepo.BlockWithSegments[] = [];
+  let conflicts = 0;
+  let released = 0;
+  for (const block of blocks) {
+    if (block.state === 'done' || blockRepo.isLocked(block) || block.date >= until) {
+      staying.push(block);
+      continue;
+    }
+    const conflict = conflictOf(block, calendar.busy.get(block.date) ?? [], ctx.closures);
+    if (conflict) {
+      conflicts += 1;
+      if (block.pinned) released += 1;
+      movable.push(block);
+    } else if (block.pinned || DateTime.fromISO(block.startsAt).toMillis() < underWay) {
+      staying.push(block);
+    } else {
+      movable.push(block);
+    }
+  }
+
+  const busyByDate = new Map(calendar.busy);
+  const addBusy = (date: string, span: BusySpan) => busyByDate.set(date, [...(busyByDate.get(date) ?? []), span]);
+  addBusy(from, now);
+  for (const block of staying) addBusy(block.date, { start: block.startsAt, end: block.endsAt });
+
+  // Open work in blocks that stay is already planned; only the rest is placed again.
+  const held = new Map<number, number>();
+  for (const block of staying) {
+    if (block.state === 'done' || blockRepo.isLocked(block)) continue;
+    for (const s of block.segments) held.set(s.taskId, (held.get(s.taskId) ?? 0) + s.minutes);
+  }
+  const tasks = withoutPinned(forecastableFrom(ctx, from), held);
+
+  const plan = planRange(from, PLAN_CALENDAR_DAYS, ctx.shape, ctx.specs, tasks, busyByDate, ctx.closures);
+  const next = plan.days.flatMap((d) => toDrafts(d.blocks).map((draft) => ({ ...draft, date: d.date })));
+  const diff = diffBlocks(movable, next);
+
+  const titleOf = new Map(ctx.tasks.map((t) => [t.id, t.title]));
+  const firstSeen = new Map<number, string>();
+  for (const block of [...diff.removed, ...diff.added].sort((a, b) => a.startsAt.localeCompare(b.startsAt))) {
+    for (const s of block.segments) if (!firstSeen.has(s.taskId)) firstSeen.set(s.taskId, block.startsAt);
+  }
+  const changedDates = [...diff.removed, ...diff.added].map((b) => b.date).sort();
+  const notYet = dueAfter(tasks, from, PLAN_CALENDAR_DAYS, zone);
+
+  return {
+    from,
+    removed: diff.removed,
+    added: diff.added,
+    summary: {
+      impacted: [...firstSeen.keys()].map((id) => ({ id, title: titleOf.get(id) ?? `#${id}` })),
+      conflicts,
+      released,
+      removed: diff.removed.length,
+      added: diff.added.length,
+      kept: diff.kept.length,
+      firstChange: changedDates[0] ?? null,
+      toGoogle: connectionState().status === 'connected' && blocks.some((b) => b.state === 'synced'),
+      unfinished: [...plan.leftover]
+        .filter(([id]) => !notYet.has(id))
+        .map(([id, minutes]) => ({ title: titleOf.get(id) ?? `#${id}`, minutes })),
+      problem: calendar.problem,
+    },
+  };
+}
+
+/** "Reschedule", step one: how many tasks a reschedule would move — nothing is changed. */
+export async function previewReschedule(): Promise<RescheduleSummary> {
+  return (await proposeReschedule()).summary;
+}
+
+/**
+ * "Reschedule", confirmed: takes the displaced blocks off the calendar and puts
+ * the new ones in. When the plan is committed, Google follows — the replaced
+ * blocks' events are deleted first (a refusal then changes nothing here) and
+ * the new blocks are created there; untouched blocks keep their events.
+ *
+ * The plan is recomputed rather than taken from the preview, so a meeting added
+ * in between is still respected.
+ */
+export async function reschedule(): Promise<RescheduleResult> {
+  const { from, summary, removed, added } = await proposeReschedule();
+  if (removed.length === 0 && added.length === 0) return { ...summary, created: 0 };
+
+  await removeBlockEvents(removed);
+  await blockRepo.deleteBlocks(removed.map((b) => b.id));
+  const ids: number[] = [];
+  for (const { date, ...draft } of added) ids.push(await blockRepo.insertDraft(date, draft));
+
+  if (!summary.toGoogle) return { ...summary, created: 0 };
+  const created = await commitBlocks(ids);
+  // Blocks left where they were keep their events; their colours follow the windows too.
+  await syncBlockColors(from);
+  return { ...summary, created };
+}
+
 export type HorizonOutlook =
   | { status: 'done' }
   | { status: 'empty' }
   /** Every planned task is finished, but the horizon itself is not marked done. */
   | { status: 'finished' }
-  /** `unplanned` counts goals below with nothing planned yet — on track only for what exists. */
-  | { status: 'on-track'; finish: string; unplanned: number }
+  /**
+   * `unplanned` counts goals below with nothing planned yet — on track only for
+   * what exists. `runsTo` is set when dated work lies beyond the forecast: the
+   * part in view is on track, and the plan continues until that date.
+   */
+  | { status: 'on-track'; finish: string; unplanned: number; runsTo: string | null }
+  /** Everything open is dated beyond the forecast; the first of it is due on `starts`. */
+  | { status: 'upcoming'; starts: string }
   | { status: 'at-risk'; finish: string | null; reason: string }
   | { status: 'unscheduled'; openTasks: number };
 
@@ -356,6 +537,7 @@ export async function outlook(ctx: PlanningContext, todaysBusy: BusySpan[] = [])
   const blocks = await blockRepo.listForDate(from);
   const busy = new Map([[from, [...todaysBusy, ...reservedSpans(ctx, from, blocks)]]]);
   const result = forecast(from, FORECAST_DAYS, ctx.shape, ctx.specs, forecastable, busy, ctx.closures);
+  const later = dueAfter(forecastable, from, FORECAST_DAYS, ctx.settings.timezone);
 
   const schedulable = new Set(forecastable.map((t) => t.id));
   const horizons = new Map<number, HorizonOutlook>();
@@ -380,14 +562,17 @@ export async function outlook(ctx: PlanningContext, todaysBusy: BusySpan[] = [])
     }
 
     const unscheduled = open.filter((t) => !schedulable.has(t.id));
-    const unfinished = open.filter((t) => schedulable.has(t.id) && !result.finishes.has(t.id));
+    const upcoming = open.filter((t) => later.has(t.id)).map((t) => later.get(t.id)!).sort();
+    const unfinished = open.filter((t) => schedulable.has(t.id) && !result.finishes.has(t.id) && !later.has(t.id));
     const finish = open
       .map((t) => result.finishes.get(t.id))
       .filter((d): d is string => d !== undefined)
       .sort()
       .at(-1) ?? null;
 
-    if (unfinished.length > 0) {
+    if (upcoming.length > 0 && upcoming.length === open.length) {
+      horizons.set(h.id, { status: 'upcoming', starts: upcoming[0] });
+    } else if (unfinished.length > 0) {
       horizons.set(h.id, {
         status: 'at-risk',
         finish: null,
@@ -404,7 +589,7 @@ export async function outlook(ctx: PlanningContext, todaysBusy: BusySpan[] = [])
         reason: `${unscheduled.length} task${unscheduled.length === 1 ? ' is' : 's are'} not in any week yet`,
       });
     } else {
-      horizons.set(h.id, { status: 'on-track', finish: finish ?? from, unplanned });
+      horizons.set(h.id, { status: 'on-track', finish: finish ?? from, unplanned, runsTo: upcoming.at(-1) ?? null });
     }
   }
 

@@ -1,10 +1,11 @@
 import 'server-only';
 import { DateTime } from 'luxon';
 import type { Settings, Vacation } from '@/lib/db/schema';
-import { eventColor, energyColor } from '@/lib/calendar/colors';
+import { blockColor, eventColor, windowColors } from '@/lib/calendar/colors';
 import { listCalendars, listRangeEvents } from '@/lib/google/calendar';
 import { connectionState, isMissingScopeError, MISSING_SCOPE_HELP } from '@/lib/google/client';
 import * as blockRepo from '@/lib/repo/blocks';
+import { listWindows } from '@/lib/repo/windows';
 import { overlaps } from './overlap';
 
 /** Something already scheduled during a vacation, offered for deletion. */
@@ -93,6 +94,7 @@ export async function vacationConflicts(v: Vacation, settings: Settings): Promis
     problem = MISSING_SCOPE_HELP;
   }
 
+  const colorOfWindow = windowColors(await listWindows());
   for (const b of await blockRepo.listForRange(firstDay, lastDay)) {
     if (!overlaps(b.startsAt, b.endsAt, v.startsAt, v.endsAt)) continue;
     const locked = b.state === 'done' || blockRepo.isLocked(b);
@@ -103,7 +105,7 @@ export async function vacationConflicts(v: Vacation, settings: Settings): Promis
       startsAt: b.startsAt,
       when: when(DateTime.fromISO(b.startsAt).setZone(zone), DateTime.fromISO(b.endsAt).setZone(zone), false),
       source: b.state === 'draft' ? 'TimeBlock draft' : 'TimeBlock',
-      color: energyColor(b.segments[0]?.task.energy ?? 'deep'),
+      color: blockColor(b.windowId !== null ? colorOfWindow.get(b.windowId) : null, b.segments[0]?.task.energy ?? 'deep'),
       deletable: !locked,
       why: locked ? 'has ticked-off work' : null,
       recurring: false,

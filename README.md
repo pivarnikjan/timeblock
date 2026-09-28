@@ -61,7 +61,11 @@ lost to meetings still surfaces the weekly review on Tuesday.
 
 **Forecast.** Week, month and year screens show when each task and goal is
 expected to finish, running the same planner forward day by day. Goals that
-finish after their period ends are flagged **at risk**. Only today's meetings
+finish after their period ends are flagged **at risk**. Dated work further out
+than the forecast looks (six weeks) is not "at risk" — it is simply later: a
+goal whose near part fits reads **on track so far · runs to <date>**, and one
+that has not started yet reads **starts <date>**. That is how a year-long plan
+of dated sessions (say, three workouts a week until next October) reads. Only today's meetings
 are known, so the forecast is optimistic: "at risk" is a real warning,
 "on track" is a best case.
 
@@ -91,7 +95,7 @@ first (Settings lists them in the same order, and the planner fills them in it).
 **Show in front** to draw the bands and their names over the blocks (clicks and
 drags still reach the blocks); untick to send them back behind. Set a window's
 colour in **Settings → Time windows**; windows without one get distinct
-defaults (Learning green, Work orange) that never match a block's colour. A
+defaults (Learning green, Work orange); the blocks in a window share its colour. A
 default follows the order windows were created in, so adding an earlier window
 never recolours the others.
 
@@ -150,9 +154,21 @@ Run *Plan calendar* afterwards to move work that was planned into it.
 
 **Colours are Google's.** An event uses its own colour if it has one, else its
 calendar's — mapped to the palette Google Calendar's web app shows (the API
-still reports an older one). TimeBlock's blocks use the colours they get once
-committed: deep = Blueberry, shallow = Peacock, admin = Banana. Drafts not yet
-in Google are dashed; declined events are outlined and struck through.
+still reports an older one). **A TimeBlock block takes its window's colour** —
+Learning work in Learning's colour, Work in Work's. Committed, its Google event
+gets the nearest of Google's eleven event colours (the default window colours
+are among them, so they match exactly). **A colour you set on the event in
+Google wins**: TimeBlock remembers which colour it gave each event, so any other
+colour is yours and is shown here too. Work with no window (Anytime) keeps its
+energy colour: deep = Blueberry, shallow = Peacock, admin = Banana. Drafts not
+yet in Google are dashed; declined events are outlined and struck through.
+
+**The same rule holds in Google Calendar.** TimeBlock keeps its events there in
+their window's colour: every *Commit*, *Reschedule* and change of a window's
+colour (or deleting a window) repaints the events that need it, and **Settings →
+Time windows → Apply window colours in Google Calendar** does it on demand — use
+it once to repaint blocks committed before this rule, which still carry their
+energy colour. Events whose colour you changed in Google are never repainted.
 
 **Hide what you do not need to see.** Unticked items are removed from the view,
 so a busy month becomes readable:
@@ -242,6 +258,30 @@ placed, so a Learning block may end at 14:15. A moved block is **pinned** (📌)
 the next *Plan calendar* or *Generate the day* works around it and does not plan
 its minutes again. **unpin** (in the Today view's block list) hands it back to
 the planner. Moving a committed block moves its Google event too.
+
+**Reschedule when the calendar changes.** A meeting lands on planned work, a
+vacation is set, a block is dragged somewhere else — and since courses run in
+order, everything after it is off too. **Reschedule…** (beside *Plan calendar*)
+re-plans from now on and first tells you what would change: *"3 tasks impacted
+from Tue 6 Oct: …"*, how many blocks are replaced and how many stay, and how
+many collide with a meeting or vacation. Nothing moves until you click
+**Reschedule N tasks**:
+
+- Only blocks that change are replaced. A block that comes out identical stays,
+  Google event and all.
+- If the plan is committed, Google follows: the replaced blocks' events are
+  deleted and the new blocks created there. A plan still in drafts stays drafts.
+- Left alone: ticked-off work, blocks already under way, and blocks you placed
+  by hand (📌) — unless a meeting now sits on one; then it is moved too, and the
+  preview says so.
+
+**Windows that stay empty?** Every busy Google event closes the time it covers,
+plus the 15-minute break on both sides — a multi-day event (say, Friday 10:00 –
+Sunday 11:00) closes every window it spans. Mark events that only *hold* time
+(breakfast, lunch, dinner, a child's weekend away) as **Placeholder** in their
+panel; for a repeating event one tick covers every repeat. The **Lunch** in
+Settings is reserved on top of that every day — set its length to 0 if your
+lunch is an event in the calendar.
 
 ## Importing tasks from CSV
 
