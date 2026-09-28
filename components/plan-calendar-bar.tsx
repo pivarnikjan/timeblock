@@ -40,6 +40,15 @@ export function PlanCalendarBar({ drafts, googleConnected }: { drafts: DraftOver
         <Button tone="primary" type="submit" name="intent" value="plan" disabled={pending}>
           {pending ? 'Working…' : 'Plan calendar'}
         </Button>
+        <Button
+          type="submit"
+          name="intent"
+          value="reschedule-preview"
+          disabled={pending}
+          title="Move the planned work that no longer fits — after new meetings or blocks you moved — and everything after it"
+        >
+          Reschedule…
+        </Button>
         {drafts.blocks > 0 && (
           <>
             <Button
@@ -69,7 +78,8 @@ export function PlanCalendarBar({ drafts, googleConnected }: { drafts: DraftOver
         <p className="text-xs text-muted">
           Lays every scheduled task into its window, day after day from today, until all of it has a place — around your
           meetings, and keeping each course in order. Drag any block to adjust it; a block you move is pinned (📌) and the
-          next plan works around it.
+          next plan works around it. New meetings since? <strong>Reschedule…</strong> shows how many tasks no longer fit and,
+          once you confirm, moves just those — and everything after them.
         </p>
       )}
       {state.kind === 'error' && <p className="text-sm text-red-500">Could not finish: {state.message}</p>}
@@ -77,11 +87,98 @@ export function PlanCalendarBar({ drafts, googleConnected }: { drafts: DraftOver
       {state.kind === 'committed' && (
         <p className="text-sm text-emerald-600">
           Committed: {plural(state.result.created, 'event')} created across {plural(state.result.days, 'day')}
-          {state.result.removed > 0 ? `, ${plural(state.result.removed, 'earlier event')} replaced` : ''}.
+          {state.result.removed > 0 ? `, ${plural(state.result.removed, 'earlier event')} replaced` : ''}
+          {state.result.recoloured ? `, ${plural(state.result.recoloured, 'earlier event')} given its window's colour` : ''}.
         </p>
       )}
       {state.kind === 'planned' && <PlanSummary summary={state.summary} />}
+      {state.kind === 'reschedule-preview' && (
+        <form action={action}>
+          <ReschedulePreview summary={state.summary} pending={pending} />
+        </form>
+      )}
+      {state.kind === 'rescheduled' && <RescheduleDone result={state.result} />}
     </section>
+  );
+}
+
+type RescheduleSummary = Extract<PlanCalendarState, { kind: 'reschedule-preview' }>['summary'];
+
+/** The titles of the first few impacted tasks, then "and N more". */
+function taskList(tasks: RescheduleSummary['impacted'], shown = 6): string {
+  const head = tasks.slice(0, shown).map((t) => t.title).join(', ');
+  return tasks.length > shown ? `${head} and ${tasks.length - shown} more` : head;
+}
+
+function RescheduleNotes({ summary: s }: { summary: RescheduleSummary }) {
+  return (
+    <>
+      {s.unfinished.length > 0 && (
+        <p className="text-xs text-amber-600">
+          Does not fit in the next three months: {s.unfinished.map((u) => `${u.title} (${formatMinutes(u.minutes)})`).join(', ')}.
+        </p>
+      )}
+      {s.problem && <p className="text-xs text-red-500">Google Calendar could not be read, so meetings were not avoided: {s.problem}</p>}
+    </>
+  );
+}
+
+/** Step one of "Reschedule": what would move, and a button to go ahead. */
+function ReschedulePreview({ summary: s, pending }: { summary: RescheduleSummary; pending: boolean }) {
+  if (s.impacted.length === 0) {
+    return (
+      <div className="space-y-1.5 text-sm">
+        <p>Nothing to reschedule — every planned block still fits where it is.</p>
+        <RescheduleNotes summary={s} />
+        <Button tone="ghost" type="submit" name="intent" value="cancel" disabled={pending}>
+          Close
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2 rounded-md border border-accent/40 bg-accent/5 px-3 py-2.5 text-sm">
+      <p>
+        <strong>{plural(s.impacted.length, 'task')} impacted</strong>
+        {s.firstChange && <> from {day(s.firstChange)}</>}: {taskList(s.impacted)}.
+      </p>
+      <p className="text-xs text-muted">
+        {plural(s.removed, 'block')} {s.removed === 1 ? 'is' : 'are'} replaced by {s.added}
+        {s.kept > 0 && `; ${plural(s.kept, 'block')} stay${s.kept === 1 ? 's' : ''} exactly where ${s.kept === 1 ? 'it is' : 'they are'}`}.
+        {s.conflicts > 0 && ` ${plural(s.conflicts, 'block')} collide${s.conflicts === 1 ? 's' : ''} with a meeting or vacation.`}
+        {s.released > 0 &&
+          ` ${plural(s.released, 'block')} you placed by hand ${s.released === 1 ? 'has' : 'have'} a meeting on ${s.released === 1 ? 'it' : 'them'} and will be moved too.`}
+        {s.toGoogle ? ' Google Calendar is updated too.' : ' The new blocks are drafts — commit them when you are happy.'}
+      </p>
+      <RescheduleNotes summary={s} />
+      <div className="flex flex-wrap gap-2">
+        <Button tone="primary" type="submit" name="intent" value="reschedule" disabled={pending}>
+          {pending ? 'Rescheduling…' : `Reschedule ${plural(s.impacted.length, 'task')}`}
+        </Button>
+        <Button tone="ghost" type="submit" name="intent" value="cancel" disabled={pending}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RescheduleDone({ result: r }: { result: Extract<PlanCalendarState, { kind: 'rescheduled' }>['result'] }) {
+  if (r.impacted.length === 0) return <p className="text-sm text-muted">Nothing to reschedule — every planned block still fits.</p>;
+  return (
+    <div className="space-y-1.5 text-sm">
+      <p className="text-emerald-600">
+        Rescheduled {plural(r.impacted.length, 'task')}: {plural(r.removed, 'block')} replaced by {r.added}
+        {r.kept > 0 && `, ${r.kept} left as they were`}
+        {r.toGoogle && ` · ${plural(r.created, 'event')} created in Google Calendar`}.{' '}
+        {r.firstChange && (
+          <Link href={`/calendar?view=workweek&date=${r.firstChange}`} className="text-accent underline underline-offset-2">
+            Review from {day(r.firstChange)} →
+          </Link>
+        )}
+      </p>
+      <RescheduleNotes summary={r} />
+    </div>
   );
 }
 
@@ -103,6 +200,12 @@ function PlanSummary({ summary: s }: { summary: Extract<PlanCalendarState, { kin
       {s.unfinished.length > 0 && (
         <p className="text-xs text-amber-600">
           Did not fit in the next three months: {s.unfinished.map((u) => `${u.title} (${formatMinutes(u.minutes)})`).join(', ')}.
+        </p>
+      )}
+      {s.later.count > 0 && s.later.until && (
+        <p className="text-xs text-muted">
+          {plural(s.later.count, 'dated task')} fall after the next three months (until {day(s.later.until)}) and will be
+          planned when their dates come closer.
         </p>
       )}
       {s.notScheduled > 0 && (

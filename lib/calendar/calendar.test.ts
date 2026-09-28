@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { windowBands, windowLegend } from './bands';
 import { busySpans } from './busy';
-import { calendarColor, energyColor, eventColor, parseHexColor, textOn, WINDOW_PALETTE, windowColor, windowColors } from './colors';
+import {
+  blockColor,
+  blockColorId,
+  colorUpdate,
+  calendarColor,
+  energyColor,
+  eventColor,
+  explicitColorId,
+  nearestEventColorId,
+  parseHexColor,
+  textOn,
+  WINDOW_PALETTE,
+  windowColor,
+  windowColors,
+} from './colors';
 import { eventKey, isHidden, parseFilters } from './filters';
 import { layoutColumns, layoutLanes } from './layout';
 import { calendarHref, calendarRange, parseView, visibleHours } from './views';
@@ -263,5 +277,57 @@ describe('event panel and placeholders', () => {
 
   it('never counts TimeBlock blocks, free or declined events as busy', () => {
     expect(busySpans([meeting({ blockId: 7 }), meeting({ busy: false })])).toEqual([]);
+  });
+});
+
+describe('block colours', () => {
+  const LEARNING_GREEN = '#33B679'; // Sage
+
+  it('gives a block its window colour, and work with no window its energy colour', () => {
+    expect(blockColor(LEARNING_GREEN, 'deep')).toBe(LEARNING_GREEN);
+    expect(blockColor('#a0c020', 'shallow', { colorId: '2', plannedColorId: '2' })).toBe('#a0c020'); // Google has the nearest; here the exact one
+    expect(blockColor(null, 'admin')).toBe(energyColor('admin'));
+  });
+
+  it('lets a colour chosen in Google win over the window', () => {
+    expect(blockColor(LEARNING_GREEN, 'deep', { colorId: '11', plannedColorId: '2' })).toBe('#D50000'); // Tomato
+  });
+
+  it('tells a colour chosen by hand from the one TimeBlock gave the event', () => {
+    expect(explicitColorId({ colorId: '2', plannedColorId: '2' })).toBeNull();
+    expect(explicitColorId({ colorId: '4', plannedColorId: '2' })).toBe('4');
+    expect(explicitColorId({ colorId: null, plannedColorId: '2' })).toBeNull();
+    // Committed before colours were recorded: the energy colours were TimeBlock's own.
+    expect(explicitColorId({ colorId: '9', plannedColorId: null })).toBeNull();
+    expect(explicitColorId({ colorId: '3', plannedColorId: null })).toBe('3');
+  });
+
+  it('picks the nearest Google event colour for a window colour', () => {
+    expect(nearestEventColorId('#33B679')).toBe('2'); // Sage, exactly
+    expect(nearestEventColorId('#F4511E')).toBe('6'); // Tangerine, exactly
+    expect(nearestEventColorId('#f5c030')).toBe('5'); // a yellow → Banana
+    expect(nearestEventColorId('#00a0e0')).toBe('7'); // a cyan → Peacock
+    expect(nearestEventColorId('nope')).toBe('9');
+  });
+});
+
+describe('block colours in Google', () => {
+  it('asks Google for the window colour, or the energy colour with no window', () => {
+    expect(blockColorId('#33B679', 'deep')).toBe('2'); // Sage
+    expect(blockColorId(null, 'shallow')).toBe('7'); // Peacock
+  });
+
+  it('repaints TimeBlock colours, leaves colours chosen by hand', () => {
+    // Committed before blocks took their window colour: Blueberry was TimeBlock's.
+    expect(colorUpdate({ colorId: '9', plannedColorId: null }, '2')).toEqual({ set: '2' });
+    // The window's colour changed since the event was committed.
+    expect(colorUpdate({ colorId: '2', plannedColorId: '2' }, '6')).toEqual({ set: '6' });
+    // Already right, and recorded.
+    expect(colorUpdate({ colorId: '2', plannedColorId: '2' }, '2')).toBe('up-to-date');
+    // Right energy colour but never recorded: record it, so a later change reads as chosen.
+    expect(colorUpdate({ colorId: '7', plannedColorId: null }, '7')).toEqual({ set: '7' });
+    // Changed in Google by hand.
+    expect(colorUpdate({ colorId: '11', plannedColorId: '2' }, '6')).toBe('chosen-by-hand');
+    expect(colorUpdate({ colorId: '3', plannedColorId: null }, '2')).toBe('chosen-by-hand');
   });
 });

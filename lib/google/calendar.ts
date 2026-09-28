@@ -8,6 +8,9 @@ import { VACATION_ID_KEY } from './vacation-event';
 /** Marks the events TimeBlock owns, so re-planning never touches a real meeting. */
 export const BLOCK_ID_KEY = 'tbBlockId';
 
+/** The colour TimeBlock gave a block's event, so a colour changed in Google afterwards reads as chosen by hand. */
+export const BLOCK_COLOR_KEY = 'tbColorId';
+
 export interface CalendarEvent {
   id: string;
   calendarId: string;
@@ -23,6 +26,8 @@ export interface CalendarEvent {
   declined: boolean;
   /** The event's own Google colour id, if it has one. */
   colorId: string | null;
+  /** TimeBlock's blocks only: the colour id TimeBlock gave the event when committing it. */
+  plannedColorId: string | null;
   /** Set when TimeBlock created this event. */
   blockId: number | null;
   /** Set when this event mirrors a TimeBlock vacation. */
@@ -88,6 +93,7 @@ function parseEvent(event: calendar_v3.Schema$Event, calendarId: string, zone: s
     busy: event.transparency !== 'transparent' && !declined,
     declined,
     colorId: event.colorId ?? null,
+    plannedColorId: event.extendedProperties?.private?.[BLOCK_COLOR_KEY] ?? null,
     blockId: Number.isFinite(blockId) && blockId > 0 ? blockId : null,
     vacationId: Number.isFinite(vacationId) && vacationId > 0 ? vacationId : null,
     recurring: Boolean(event.recurringEventId),

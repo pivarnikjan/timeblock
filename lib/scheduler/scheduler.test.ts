@@ -1,8 +1,9 @@
 import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
 import { dayWindow, freeSlots, windowInterval, type BusySpan, type DayShape, type WindowSpec } from './day';
-import { forecast, planRange } from './forecast';
+import { dueAfter, forecast, planRange } from './forecast';
 import { blockCap, planDay, rankTasks, type PlannableTask, type PlannedBlock } from './plan';
+import { conflictOf, diffBlocks } from './reschedule';
 
 const TZ = 'Europe/Vienna';
 
@@ -461,5 +462,94 @@ describe('vacation', () => {
     const result = planRange(MONDAY, 10, SHAPE, WINDOWS, [{ ...task({ id: 1, remainingMin: 300 }), availableFrom: null }], new Map(), closeAll(local(TUESDAY, '00:00'), local('2026-10-01', '00:00')));
 
     expect(result.days.map((d) => d.date)).toEqual([MONDAY, '2026-10-01']);
+  });
+});
+
+describe('dated work further out', () => {
+  it('counts tasks dated after the range as later, not as work that does not fit', () => {
+    const tasks = [
+      { id: 1, availableFrom: null }, // schedulable now
+      { id: 2, availableFrom: '2026-10-09' }, // last day of a 12-day range from Monday
+      { id: 3, availableFrom: '2026-10-10' }, // the day after
+      { id: 4, availableFrom: '2027-03-01' },
+    ];
+
+    expect(dueAfter(tasks, MONDAY, 12, TZ)).toEqual(new Map([[3, '2026-10-10'], [4, '2027-03-01']]));
+  });
+
+  it('plans a dated workout on its day, not before', () => {
+    const WEDNESDAY = '2026-09-30';
+    const result = planRange(MONDAY, 7, SHAPE, WINDOWS, [{ ...task({ id: 1, remainingMin: 60, dueDate: WEDNESDAY }), availableFrom: WEDNESDAY }]);
+
+    expect(result.days.map((d) => d.date)).toEqual([WEDNESDAY]);
+  });
+});
+
+describe('reschedule', () => {
+  const placed = (date: string, from: string, to: string, segments: [number, number][], over: Partial<{ pinned: boolean; windowId: number | null }> = {}) => ({
+    startsAt: local(date, from),
+    endsAt: local(date, to),
+    windowId: LEARNING.id,
+    segments: segments.map(([taskId, minutes]) => ({ taskId, minutes })),
+    pinned: false,
+    ...over,
+  });
+
+  it('finds a block a new meeting now sits on, but not one the meeting only touches', () => {
+    const block = placed(MONDAY, '10:30', '11:15', [[1, 45]]);
+
+    expect(conflictOf(block, [meeting(MONDAY, '11:00', '12:00')], [])).toBe('meeting');
+    expect(conflictOf(block, [meeting(MONDAY, '11:15', '12:00')], [])).toBeNull();
+  });
+
+  it('lets a vacation displace a planned block, but not one placed by hand', () => {
+    const closure = { windowId: LEARNING.id, start: local(MONDAY, '00:00'), end: local(TUESDAY, '00:00') };
+
+    expect(conflictOf(placed(MONDAY, '10:30', '11:15', [[1, 45]]), [], [closure])).toBe('vacation');
+    expect(conflictOf(placed(MONDAY, '10:30', '11:15', [[1, 45]], { pinned: true }), [], [closure])).toBeNull();
+    expect(conflictOf(placed(MONDAY, '14:30', '15:15', [[1, 45]], { windowId: WORK.id }), [], [closure])).toBeNull();
+  });
+
+  it('keeps identical blocks and counts the tasks of every block that changes', () => {
+    const current = [
+      placed(MONDAY, '10:30', '11:15', [[1, 45]]),
+      placed(MONDAY, '11:30', '12:00', [[1, 15], [2, 15]]),
+      placed(TUESDAY, '10:30', '11:30', [[3, 60]]),
+    ];
+    // A meeting at 11:30 pushed the second block to 12:30; the Tuesday block did not move.
+    const next = [
+      placed(MONDAY, '10:30', '11:15', [[1, 45]]),
+      placed(MONDAY, '12:30', '13:00', [[1, 15], [2, 15]]),
+      placed(TUESDAY, '10:30', '11:30', [[3, 60]]),
+    ];
+
+    const diff = diffBlocks(current, next);
+
+    expect(diff.kept).toEqual([current[0], current[2]]);
+    expect(diff.removed).toEqual([current[1]]);
+    expect(diff.added).toEqual([next[1]]);
+    expect([...diff.impacted].sort()).toEqual([1, 2]);
+  });
+
+  it('treats the same time with different work as a change', () => {
+    const diff = diffBlocks([placed(MONDAY, '10:30', '11:15', [[1, 45]])], [placed(MONDAY, '10:30', '11:15', [[1, 30], [2, 15]])]);
+
+    expect(diff.kept).toEqual([]);
+    expect([...diff.impacted].sort()).toEqual([1, 2]);
+  });
+
+  it('after a new meeting, moves only the blocks that change', () => {
+    const tasks = [task({ id: 1, remainingMin: 45 }), task({ id: 2, remainingMin: 90 })];
+    const before = planDay(MONDAY, SHAPE, [], WINDOWS, tasks).blocks;
+    const after = planDay(MONDAY, SHAPE, [meeting(MONDAY, '11:30', '12:00')], WINDOWS, tasks).blocks;
+    const asPlaced = (blocks: PlannedBlock[]) =>
+      blocks.map((b) => ({ startsAt: b.start.toUTC().toISO()!, endsAt: b.end.toUTC().toISO()!, windowId: b.windowId, segments: b.segments }));
+
+    const diff = diffBlocks(asPlaced(before), asPlaced(after));
+
+    const at = (blocks: { startsAt: string }[]) => blocks.map((b) => hhmm(DateTime.fromISO(b.startsAt)));
+    expect(at(diff.kept)).toEqual(['10:30', '12:30']); // identical before and after: untouched
+    expect(at(diff.removed)).toEqual(['11:30', '13:30']); // under the meeting, and the block its minutes cascade into
+    expect([...diff.impacted]).toEqual([2]);
   });
 });

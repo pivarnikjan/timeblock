@@ -16,6 +16,9 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-09-28 | v0.8.1 | [E14 · Readable time windows](#e14--readable-time-windows) | TB-071 – TB-072 (changes) | Done |
+| 2026-09-28 | v0.8 | [E17 · Reschedule](#e17--reschedule) | TB-068 – TB-070 | Done |
+| 2026-09-27 | v0.7.1 | [E13 · Plan the whole calendar](#e13--plan-the-whole-calendar) | TB-067 (fix) | Done |
 | 2026-09-27 | v0.7 | [E16 · Vacation](#e16--vacation) | TB-062 – TB-066 | Done |
 | 2026-09-27 | v0.6 | [E15 · Event panel](#e15--event-panel) | TB-057 – TB-061 | Done |
 | 2026-09-27 | v0.5.1 | [E14 · Readable time windows](#e14--readable-time-windows) | TB-054 – TB-056 (changes) | Done |
@@ -36,6 +39,64 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-09-28 · v0.8 — Reschedule
+
+**Theme.** When the calendar changes under a committed plan — a new meeting, a
+vacation, a block moved by hand — one click moves just the work that no longer
+fits, and everything that follows it in the course.
+
+**Upgrade notes.** No migration. *Plan calendar* is unchanged; *Reschedule…*
+sits beside it.
+
+## E17 · Reschedule
+
+> Keep a sequentially planned calendar true without dragging blocks around by
+> hand.
+
+### TB-068 · See how many tasks a reschedule moves
+*As a planner whose calendar just changed, I want to click one button and be
+told how many tasks are impacted, so that I decide before anything moves.*
+
+Acceptance criteria
+- [x] **Reschedule…** beside *Plan calendar* re-plans from now on around every
+      meeting, vacation and block placed by hand, and changes nothing yet.
+- [x] It says how many tasks are impacted (with their titles), from which day,
+      how many blocks are replaced and how many stay, and how many collide with
+      a meeting or vacation.
+- [x] When nothing changed it says so: "every planned block still fits".
+
+### TB-069 · Reschedule on confirmation, Google included
+*As a planner, I want the impacted tasks moved once I confirm, so that I never
+move slots by hand.*
+
+Acceptance criteria
+- [x] **Reschedule N tasks** replaces only the blocks that change; a block that
+      comes out identical keeps its place and its Google event.
+- [x] Courses stay in order: a displaced block moves the work after it too.
+- [x] When the plan is committed, the replaced blocks' events are deleted from
+      Google (first, so a refusal changes nothing) and the new blocks are created
+      there; a plan still in drafts stays drafts.
+- [x] The plan is recomputed on confirmation, so a meeting added after the
+      preview is still respected.
+
+### TB-070 · What a reschedule leaves alone
+*As a planner, I want work I did or placed myself left where it is, so that a
+reschedule only fixes what is broken.*
+
+Acceptance criteria
+- [x] Ticked-off work, and blocks already under way (starting before the next
+      re-plan could), stay.
+- [x] Blocks placed by hand (📌) stay — unless a meeting now sits on one; then
+      it is moved and the preview says so.
+
+Where to look: `components/plan-calendar-bar.tsx` (`ReschedulePreview`) ·
+`app/actions/plan.ts` · `lib/planner.ts` (`proposeReschedule`, `reschedule`) ·
+`lib/scheduler/reschedule.ts` (`conflictOf`, `diffBlocks`) ·
+`lib/google/sync.ts` (`removeBlockEvents`, `commitBlocks`) ·
+`lib/scheduler/scheduler.test.ts` ("reschedule").
 
 ---
 
@@ -294,6 +355,41 @@ Acceptance criteria
 Where to look: `app/(planning)/layout.tsx` · `components/planning-tabs.tsx` ·
 `components/main-nav.tsx` · `app/planning/page.tsx`.
 
+### TB-071 · Blocks in their window's colour *(change, 2026-09-28)*
+*As a planner, I want the work in a time window to share the window's colour,
+unless I coloured an event myself, so that I see at a glance what kind of time
+each block is.*
+
+Acceptance criteria
+- [x] A block is drawn in its window's colour (drafts dashed as before); work
+      with no window keeps its energy colour.
+- [x] Committing gives the Google event the nearest of Google's event colours
+      and records it on the event.
+- [x] A colour set on a block's event in Google wins, on TimeBlock's calendar
+      too. Events committed earlier with an energy colour count as TimeBlock's;
+      any other colour on them counts as chosen by hand.
+
+Where to look: `lib/calendar/colors.ts` (`blockColor`, `explicitColorId`,
+`nearestEventColorId`, + tests) · `lib/google/sync.ts` (`insertBlockEvent`) ·
+`lib/google/calendar.ts` (`BLOCK_COLOR_KEY`) · `lib/calendar/load.ts`.
+
+### TB-072 · The same colours in Google Calendar *(change, 2026-09-28)*
+*As a planner, I want my blocks in Google Calendar coloured by the same rule, so
+that both calendars read the same.*
+
+Acceptance criteria
+- [x] Blocks already in Google are repainted to their window's colour after
+      every commit and reschedule, and when a window's colour changes or a
+      window is deleted.
+- [x] **Settings → Time windows → Apply window colours in Google Calendar**
+      repaints on demand and reports how many events changed and how many keep
+      a colour chosen by hand.
+- [x] An event whose colour was changed in Google is never repainted.
+
+Where to look: `lib/google/sync.ts` (`syncBlockColors`) · `lib/calendar/colors.ts`
+(`blockColorId`, `colorUpdate`, + tests) · `app/actions/settings.ts`
+(`recolourGoogleAction`, `followColors`) · `app/settings/page.tsx`.
+
 ### TB-053 · Week by default
 *As a planner, I want the Calendar to open in Week, and to choose that default
 myself, so that I see my week without switching views.*
@@ -374,6 +470,27 @@ Where to look: `components/calendar/draggable-block.tsx` ·
 `components/calendar/time-grid.tsx` · `app/actions/plan.ts`
 (`moveBlockAction`, `unpinBlockAction`) · `lib/repo/blocks.ts`.
 
+### TB-067 · Long dated plans are "later", not "at risk" *(fix, 2026-09-27)*
+*As a planner with a year-long plan of dated sessions, I want goals judged on
+the work that is due within the forecast, so that next spring's workouts do not
+mark my goal "at risk" today.*
+
+Found in use: importing *My Fitness Transformation* (344 dated sessions,
+Sep 2026 – Oct 2027) flagged the goal "at risk · 48 tasks won't fit in the next
+42 days", and Plan calendar would have listed every session beyond three months
+as "did not fit". Those tasks are not due yet.
+
+Acceptance criteria
+- [x] Tasks that only become schedulable after the forecast range are not
+      counted as unfinished: a goal reads "on track so far · runs to <date>",
+      one with nothing due yet reads "starts <date>".
+- [x] Plan calendar reports them as "N dated tasks fall after the next three
+      months … and will be planned when their dates come closer".
+- [x] A dated task is planned on its date, not before.
+
+Where to look: `lib/scheduler/forecast.ts` (`dueAfter`, + tests) ·
+`lib/planner.ts` (`outlook`, `planCalendar`) · `components/progress.tsx`.
+
 ### TB-050 · Finish the goal as soon as possible *(change, 2026-09-27)*
 *As a learner, I want the plan to fill every learning window back to back, so
 that I complete my goal as early as possible instead of waiting for each week.*
@@ -435,7 +552,7 @@ Acceptance criteria
 - [x] Event colour = its own colour, else its calendar's, mapped to the modern
       palette Google's web app shows (the API reports an older one).
 - [x] TimeBlock blocks use the colours they get in Google (Blueberry, Peacock,
-      Banana); drafts are dashed; declined events outlined and struck through.
+      Banana — since v0.8.1 their window's colour, see TB-071); drafts are dashed; declined events outlined and struck through.
 - [x] Overlapping events sit side by side; all-day and multi-day events run as
       bars across the days they cover, cut at the edges of the view.
 - [x] Today's date is highlighted and a red line marks the current time; the

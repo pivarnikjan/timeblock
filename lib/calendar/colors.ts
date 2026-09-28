@@ -67,8 +67,8 @@ export function eventColor(colorId: string | null | undefined, calendarBackgroun
 }
 
 /**
- * TimeBlock's blocks use the colours they get in Google once committed, so a
- * draft looks the same before and after it reaches the calendar.
+ * Colours by energy, for blocks with no window (Anytime) — and what blocks were
+ * given in Google before they took their window's colour.
  */
 export const ENERGY_COLOR_ID: Record<Energy, string> = {
   deep: '9', // Blueberry
@@ -78,6 +78,80 @@ export const ENERGY_COLOR_ID: Record<Energy, string> = {
 
 export function energyColor(energy: Energy): string {
   return EVENT_COLORS[ENERGY_COLOR_ID[energy]].hex;
+}
+
+const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+
+/**
+ * The Google event colour closest to `hex`. Google only takes its own eleven
+ * event colours, so a committed block gets the nearest one to its window's.
+ */
+export function nearestEventColorId(hex: string): string {
+  if (!HEX.test(hex)) return ENERGY_COLOR_ID.deep;
+  const [r, g, b] = rgb(hex);
+  let best = ENERGY_COLOR_ID.deep;
+  let bestDistance = Infinity;
+  for (const [id, { hex: candidate }] of Object.entries(EVENT_COLORS)) {
+    const [cr, cg, cb] = rgb(candidate);
+    // Weighted RGB distance: close enough to how the eye ranks colours for picking from eleven.
+    const distance = 2 * (r - cr) ** 2 + 4 * (g - cg) ** 2 + 3 * (b - cb) ** 2;
+    if (distance < bestDistance) [best, bestDistance] = [id, distance];
+  }
+  return best;
+}
+
+/**
+ * The Google colour a block's event should have — the same rule as on
+ * TimeBlock's calendar: its window's colour (the nearest Google has), else, for
+ * work with no window, its energy's.
+ */
+export function blockColorId(windowHex: string | null | undefined, energy: Energy): string {
+  return windowHex ? nearestEventColorId(windowHex) : ENERGY_COLOR_ID[energy];
+}
+
+/** A committed block's Google event, as far as colour goes. */
+export interface BlockEventColor {
+  /** The colour the event has in Google now. */
+  colorId: string | null;
+  /** The colour TimeBlock gave it when committing it; null for events committed before it recorded one. */
+  plannedColorId: string | null;
+}
+
+const LEGACY_BLOCK_COLOR_IDS = new Set(Object.values(ENERGY_COLOR_ID));
+
+/**
+ * The colour someone chose for a block's event in Google Calendar, or null when
+ * it still has the one TimeBlock gave it. Events committed before TimeBlock
+ * recorded its colour carry an energy colour; any other colour on them was
+ * chosen by hand.
+ */
+export function explicitColorId(event: BlockEventColor | null | undefined): string | null {
+  const id = event?.colorId;
+  if (!id || !EVENT_COLORS[id]) return null;
+  if (event.plannedColorId !== null) return id === event.plannedColorId ? null : id;
+  return LEGACY_BLOCK_COLOR_IDS.has(id) ? null : id;
+}
+
+/**
+ * What a block's Google event needs so it follows the colour rule: nothing when
+ * its colour was chosen by hand or is already `target` (and recorded as
+ * TimeBlock's), else `target`.
+ */
+export function colorUpdate(event: BlockEventColor, target: string): 'chosen-by-hand' | 'up-to-date' | { set: string } {
+  if (explicitColorId(event)) return 'chosen-by-hand';
+  if (event.colorId === target && event.plannedColorId === target) return 'up-to-date';
+  return { set: target };
+}
+
+/**
+ * A block's colour: the colour set on its event in Google if someone set one,
+ * else its window's (Learning work in Learning's colour), else — for work with
+ * no window — its energy's.
+ */
+export function blockColor(windowHex: string | null | undefined, energy: Energy, event?: BlockEventColor | null): string {
+  const chosen = explicitColorId(event);
+  if (chosen) return EVENT_COLORS[chosen].hex;
+  return windowHex ?? energyColor(energy);
 }
 
 /** White or near-black text, whichever reads better on `hex` (WCAG relative luminance). */
@@ -94,9 +168,9 @@ export function textOn(hex: string): string {
 
 /**
  * Colours for time windows (Learning, Work…) that have not been given one in
- * Settings, by position. Chosen from Google's palette but away from the three
- * block colours (Blueberry, Peacock, Banana), so a window band never looks
- * like a block.
+ * Settings, by position. Chosen from Google's palette, so a block in the window
+ * looks the same in Google (the first five are event colours), and away from the energy colours
+ * (Blueberry, Peacock, Banana) that blocks with no window keep.
  */
 export const WINDOW_PALETTE = ['#33B679', '#F4511E', '#8E24AA', '#E67C73', '#0B8043', '#795548'] as const;
 

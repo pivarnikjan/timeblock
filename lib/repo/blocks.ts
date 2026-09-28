@@ -58,6 +58,22 @@ export async function listFrom(from: string): Promise<BlockWithSegments[]> {
   return withSegments(rows);
 }
 
+/** Blocks that have an event in Google Calendar (committed, or history since), optionally from a local date on. */
+export async function listCommitted(from?: string): Promise<BlockWithSegments[]> {
+  const rows = await db()
+    .select()
+    .from(blocks)
+    .where(
+      and(
+        isNotNull(blocks.googleEventId),
+        inArray(blocks.state, ['synced', 'done']),
+        from ? gte(blocks.date, from) : undefined,
+      ),
+    )
+    .orderBy(asc(blocks.startsAt));
+  return withSegments(rows);
+}
+
 export async function getBlock(id: number): Promise<BlockWithSegments | null> {
   const rows = await db().select().from(blocks).where(eq(blocks.id, id));
   return (await withSegments(rows))[0] ?? null;
@@ -96,7 +112,8 @@ export interface DraftBlock {
  */
 export const isFixed = (block: BlockWithSegments) => block.state === 'done' || isLocked(block) || block.pinned;
 
-async function insertDraft(date: string, draft: DraftBlock): Promise<void> {
+/** Stores one planned block as a draft and returns its id. */
+export async function insertDraft(date: string, draft: DraftBlock): Promise<number> {
   const [block] = await db()
     .insert(blocks)
     .values({ date, startsAt: draft.startsAt, endsAt: draft.endsAt, windowId: draft.windowId, state: 'draft' })
@@ -104,6 +121,7 @@ async function insertDraft(date: string, draft: DraftBlock): Promise<void> {
   await db()
     .insert(blockSegments)
     .values(draft.segments.map((s, i) => ({ blockId: block.id, taskId: s.taskId, minutes: s.minutes, sortOrder: i })));
+  return block.id;
 }
 
 async function deleteBlocksAndSegments(ids: number[]): Promise<void> {
@@ -180,6 +198,11 @@ export async function moveBlock(id: number, date: string, startsAt: string, ends
 /** Removes a block and its task segments. */
 export async function deleteBlock(id: number): Promise<void> {
   await deleteBlocksAndSegments([id]);
+}
+
+/** Removes several blocks and their task segments. */
+export async function deleteBlocks(ids: number[]): Promise<void> {
+  await deleteBlocksAndSegments(ids);
 }
 
 export async function setPinned(id: number, pinned: boolean): Promise<void> {

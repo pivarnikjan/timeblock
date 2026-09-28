@@ -4,8 +4,10 @@ import * as blockRepo from '@/lib/repo/blocks';
 import { listAllHorizons } from '@/lib/repo/horizons';
 import { getSettings, updateSettings } from '@/lib/repo/settings';
 import type { Vacation } from '@/lib/db/schema';
-import { BLOCK_ID_KEY } from './calendar';
-import { calendarApi } from './client';
+import { blockColorId, colorUpdate, windowColors } from '@/lib/calendar/colors';
+import { listWindows } from '@/lib/repo/windows';
+import { BLOCK_COLOR_KEY, BLOCK_ID_KEY } from './calendar';
+import { calendarApi, connectionState } from './client';
 import { eventContent } from './event-content';
 import { vacationEventBody } from './vacation-event';
 
@@ -73,8 +75,8 @@ async function deleteEvent(calendarId: string, eventId: string): Promise<boolean
 export async function commitDay(date: string): Promise<CommitResult> {
   const settings = await getSettings();
   const calendarId = await ensureTargetCalendar();
-  const api = calendarApi();
   const byId = indexHorizons(await listAllHorizons());
+  const colors = windowColors(await listWindows());
 
   const day = await blockRepo.listForDate(date);
 
@@ -86,32 +88,153 @@ export async function commitDay(date: string): Promise<CommitResult> {
 
   let created = 0;
   for (const block of day.filter((b) => b.state === 'draft')) {
-    const content = eventContent(block.segments, byId);
-    const { data } = await api.events.insert({
-      calendarId,
-      requestBody: {
-        ...content,
-        start: { dateTime: block.startsAt, timeZone: settings.timezone },
-        end: { dateTime: block.endsAt, timeZone: settings.timezone },
-        transparency: 'opaque',
-        reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 1 }] },
-        extendedProperties: { private: { [BLOCK_ID_KEY]: String(block.id) } },
-      },
-    });
-
-    if (data.id) {
-      await blockRepo.markSynced(block.id, data.id);
-      created += 1;
-    }
+    if (await insertBlockEvent(block, calendarId, settings.timezone, byId, colors)) created += 1;
   }
 
   return { created, removed, calendarId };
+}
+
+/**
+ * Creates a draft block's event in TimeBlock's calendar and marks the block
+ * committed. The event takes the Google colour nearest its window's (`colors`,
+ * by window id), and that colour is recorded on it: a colour changed in Google
+ * later is then recognised as chosen by hand, and wins.
+ */
+async function insertBlockEvent(
+  block: blockRepo.BlockWithSegments,
+  calendarId: string,
+  timeZone: string,
+  byId: ReturnType<typeof indexHorizons>,
+  colors: Map<number, string>,
+): Promise<boolean> {
+  const content = eventContent(block.segments, byId);
+  const colorId = colorIdOf(block, colors);
+  const { data } = await calendarApi().events.insert({
+    calendarId,
+    requestBody: {
+      ...content,
+      colorId,
+      start: { dateTime: block.startsAt, timeZone },
+      end: { dateTime: block.endsAt, timeZone },
+      transparency: 'opaque',
+      reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 1 }] },
+      extendedProperties: { private: { [BLOCK_ID_KEY]: String(block.id), [BLOCK_COLOR_KEY]: colorId } },
+    },
+  });
+  if (!data.id) return false;
+  await blockRepo.markSynced(block.id, data.id);
+  return true;
+}
+
+/**
+ * Deletes the Google events of committed blocks a reschedule replaces (already
+ * gone is fine). Returns how many were deleted.
+ */
+export async function removeBlockEvents(blocks: blockRepo.BlockWithSegments[]): Promise<number> {
+  const withEvents = blocks.filter((b) => b.state === 'synced' && b.googleEventId);
+  if (withEvents.length === 0) return 0;
+  const calendarId = await ensureTargetCalendar();
+  let removed = 0;
+  for (const block of withEvents) if (await deleteEvent(calendarId, block.googleEventId!)) removed += 1;
+  return removed;
+}
+
+/**
+ * Sends just these draft blocks to Google — unlike `commitDay`, every other
+ * TimeBlock event on their days is left exactly as it is. Returns how many
+ * events were created.
+ */
+export async function commitBlocks(ids: number[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const settings = await getSettings();
+  const calendarId = await ensureTargetCalendar();
+  const byId = indexHorizons(await listAllHorizons());
+  const colors = windowColors(await listWindows());
+  let created = 0;
+  for (const id of ids) {
+    const block = await blockRepo.getBlock(id);
+    if (block?.state === 'draft' && (await insertBlockEvent(block, calendarId, settings.timezone, byId, colors))) created += 1;
+  }
+  return created;
+}
+
+/** The Google colour a block's event should have (see `blockColorId`). */
+function colorIdOf(block: blockRepo.BlockWithSegments, colors: Map<number, string>): string {
+  return blockColorId(block.windowId !== null ? colors.get(block.windowId) : null, block.segments[0]?.task.energy ?? 'deep');
+}
+
+export interface ColorSyncResult {
+  /** Events given their window's colour. */
+  recoloured: number;
+  /** Events left alone because someone chose their colour in Google. */
+  chosenByHand: number;
+}
+
+/**
+ * Brings the colours of TimeBlock's events in Google in line with the rule the
+ * calendar shows: each block in its window's colour (the nearest Google has),
+ * work with no window in its energy's — except an event whose colour was chosen
+ * by hand in Google, which is never touched. Every event it colours is stamped
+ * with that colour, so a later change in Google is recognised as a choice.
+ *
+ * Covers committed blocks from the local date `from` on (all of them when
+ * omitted). Does nothing when Google is not connected or nothing is committed.
+ */
+export async function syncBlockColors(from?: string): Promise<ColorSyncResult> {
+  const result: ColorSyncResult = { recoloured: 0, chosenByHand: 0 };
+  const settings = await getSettings();
+  if (connectionState().status !== 'connected' || !settings.targetCalendarId) return result;
+
+  const blocks = await blockRepo.listCommitted(from);
+  if (blocks.length === 0) return result;
+  const byEvent = new Map(blocks.map((b) => [b.googleEventId!, b]));
+  const colors = windowColors(await listWindows());
+
+  const api = calendarApi();
+  const calendarId = settings.targetCalendarId;
+  let pageToken: string | undefined;
+  do {
+    const { data } = await api.events.list({
+      calendarId,
+      timeMin: blocks[0].startsAt,
+      timeMax: blocks.reduce((max, b) => (b.endsAt > max ? b.endsAt : max), blocks[0].endsAt),
+      singleEvents: true,
+      maxResults: 2500,
+      pageToken,
+    });
+    for (const event of data.items ?? []) {
+      const block = event.id ? byEvent.get(event.id) : undefined;
+      if (!block || event.status === 'cancelled') continue;
+
+      const stamps = event.extendedProperties?.private ?? {};
+      const update = colorUpdate(
+        { colorId: event.colorId ?? null, plannedColorId: stamps[BLOCK_COLOR_KEY] ?? null },
+        colorIdOf(block, colors),
+      );
+      if (update === 'chosen-by-hand') result.chosenByHand += 1;
+      if (typeof update === 'string') continue;
+      const colorId = update.set;
+
+      await api.events.patch({
+        calendarId,
+        eventId: event.id!,
+        // The whole private map is sent, so the block id stamped beside the colour is kept.
+        requestBody: { colorId, extendedProperties: { private: { ...stamps, [BLOCK_COLOR_KEY]: colorId } } },
+      });
+      result.recoloured += 1;
+    }
+    pageToken = data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  return result;
 }
 
 export interface CommitRangeResult {
   days: number;
   created: number;
   removed: number;
+  /** Earlier TimeBlock events given their window's colour on the way. */
+  recoloured?: number;
 }
 
 /**
@@ -130,6 +253,8 @@ export async function commitFrom(from: string): Promise<CommitRangeResult> {
     total.created += result.created;
     total.removed += result.removed;
   }
+  // Blocks committed earlier (or before blocks took their window's colour) follow the same colours.
+  total.recoloured = (await syncBlockColors(from)).recoloured;
   return total;
 }
 

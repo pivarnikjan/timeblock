@@ -1,11 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { clearCredentials } from '@/lib/google/credentials';
 import { num, optNum, optStr, str } from '@/lib/forms';
 import { updateSettings } from '@/lib/repo/settings';
-import { createWindow, deleteWindow, updateWindow } from '@/lib/repo/windows';
-import { parseHexColor } from '@/lib/calendar/colors';
+import { syncBlockColors } from '@/lib/google/sync';
+import { createWindow, deleteWindow, listWindows, updateWindow } from '@/lib/repo/windows';
+import { parseHexColor, windowColors } from '@/lib/calendar/colors';
 
 export async function updateDayShapeAction(form: FormData): Promise<void> {
   await updateSettings({
@@ -65,6 +67,7 @@ export async function updateWindowAction(form: FormData): Promise<void> {
   const startTime = str(form, 'startTime');
   const endTime = str(form, 'endTime');
   assertOrder(startTime, endTime);
+  const before = windowColors(await listWindows());
   await updateWindow(num(form, 'id'), {
     name: str(form, 'name'),
     startTime,
@@ -72,12 +75,41 @@ export async function updateWindowAction(form: FormData): Promise<void> {
     weekdays: weekdaysOf(form),
     color: parseHexColor(form.get('color')),
   });
-  revalidatePath('/', 'layout');
+  await followColors(before);
 }
 
 export async function deleteWindowAction(form: FormData): Promise<void> {
+  const before = windowColors(await listWindows());
   await deleteWindow(num(form, 'id'));
+  await followColors(before);
+}
+
+/**
+ * After a window changed: when any window's colour is now different (its own,
+ * or a default shifted by a deletion), TimeBlock's events in Google are
+ * repainted to match.
+ */
+async function followColors(before: Map<number, string>): Promise<void> {
   revalidatePath('/', 'layout');
+  const after = windowColors(await listWindows());
+  if ([...before].some(([id, color]) => after.get(id) !== color)) await recolourGoogleAction();
+}
+
+/**
+ * Settings → Time windows → "Apply window colours in Google Calendar": gives
+ * every TimeBlock event in Google its window's colour, except those coloured by
+ * hand, and reports back on the Settings page.
+ */
+export async function recolourGoogleAction(): Promise<void> {
+  let query: string;
+  try {
+    const result = await syncBlockColors();
+    query = `recoloured=${result.recoloured}&byHand=${result.chosenByHand}`;
+  } catch (error) {
+    query = `colorError=${encodeURIComponent((error as Error).message)}`;
+  }
+  revalidatePath('/', 'layout');
+  redirect(`/settings?${query}#windows`);
 }
 
 export async function setDefaultWindowAction(form: FormData): Promise<void> {

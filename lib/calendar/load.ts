@@ -11,7 +11,7 @@ import { getSettings, getCalendarFilters } from '@/lib/repo/settings';
 import { listWindows, toSpec } from '@/lib/repo/windows';
 import { nowIn } from '@/lib/time/periods';
 import { windowBands, windowLegend, type WindowBand, type WindowLegend } from './bands';
-import { energyColor, eventColor, textOn } from './colors';
+import { blockColor, eventColor, textOn, windowColors } from './colors';
 import { eventKey, isHidden, type CalendarFilters } from './filters';
 import { calendarRange, visibleHours, type CalendarRange, type CalendarView } from './views';
 
@@ -153,6 +153,9 @@ export async function loadCalendarView(view: CalendarView, anchor: string, selec
   const calendarById = new Map(calendars.map((c) => [c.id, c]));
 
   const items: CalendarItem[] = [];
+  // A committed block's Google copy: a colour chosen for it there wins over its window's.
+  const blockEvents = new Map(events.filter((e) => e.blockId !== null).map((e) => [e.blockId!, e]));
+  const colorOfWindow = windowColors(windows);
 
   for (const e of events) {
     // TimeBlock's own events (blocks, vacation copies) are drawn from local data instead.
@@ -201,7 +204,11 @@ export async function loadCalendarView(view: CalendarView, anchor: string, selec
     if (isHidden({ calendarId: null, key: null, isBlock: true, multiDay: false }, filters, view)) break;
     const start = DateTime.fromISO(b.startsAt).setZone(zone);
     const end = DateTime.fromISO(b.endsAt).setZone(zone);
-    const color = energyColor(b.segments[0]?.task.energy ?? 'deep');
+    const color = blockColor(
+      b.windowId !== null ? colorOfWindow.get(b.windowId) : null,
+      b.segments[0]?.task.energy ?? 'deep',
+      blockEvents.get(b.id),
+    );
     items.push({
       id: `block:${b.id}`,
       kind: 'block',
