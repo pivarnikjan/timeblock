@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createDb, type Db } from './client';
-import { runMigrations, seedSettings } from '@timeblock/core/db/migrate';
+import { isNewDatabase, runMigrations, seedSettings } from '@timeblock/core/db/migrate';
 import { installSync } from '@timeblock/core/sync/install';
 import { nodeDriver } from './driver';
 
@@ -14,6 +14,6 @@ export function testDb(): { db: Db; sqlite: DatabaseSync } {
   const driver = nodeDriver(sqlite);
   runMigrations(driver);
   seedSettings(driver);
-  installSync(driver, { newDatabase: true, name: 'Test' });
+  installSync(driver, { newDatabase: isNewDatabase(driver), name: 'Test' });
   return { db: createDb(sqlite), sqlite };
 }

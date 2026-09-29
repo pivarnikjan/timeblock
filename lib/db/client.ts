@@ -37,10 +37,10 @@ function openDatabase(): DatabaseSync {
   // Single-user local app: migrating on open is cheaper than remembering to run
   // a CLI step, and it keeps the schema honest after a `git pull`.
   const driver = nodeDriver(db);
-  const applied = runMigrations(driver);
+  runMigrations(driver);
   seedSettings(driver);
   // After seeding, so a new database's defaults stay unstamped and lose to real data on the first sync.
-  installSync(driver, { newDatabase: isNewDatabase(applied), name: 'Desktop' });
+  installSync(driver, { newDatabase: isNewDatabase(driver), name: 'Desktop' });
   return db;
 }
 

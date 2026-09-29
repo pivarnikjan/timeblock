@@ -2,6 +2,14 @@ import { transaction, type SqlDriver } from './driver';
 import { MIGRATIONS, type Migration } from './migrations';
 
 /**
+ * A ledger entry that is not a migration: this runner built the database from
+ * nothing, so what the migrations put there are defaults, not anyone's data.
+ * Written with the first migration, so an interrupted first start cannot lose
+ * it. Sorts before every migration name.
+ */
+const CREATED = '.created';
+
+/**
  * Applies any `drizzle-kit generate` output that this database has not seen yet.
  * Drizzle's own migrator targets real drivers, and both apps run on bridges
  * (node:sqlite on the desktop, expo-sqlite on the phone), so the generated SQL
@@ -16,6 +24,7 @@ export function runMigrations(db: SqlDriver, migrations: readonly Migration[] = 
   );
 
   const applied = new Set(db.all<{ name: string }>('SELECT name FROM __migrations').map((r) => r.name));
+  const building = applied.size === 0;
 
   const fresh: string[] = [];
   for (const migration of migrations) {
@@ -23,7 +32,9 @@ export function runMigrations(db: SqlDriver, migrations: readonly Migration[] = 
     try {
       transaction(db, () => {
         for (const statement of migration.statements) db.exec(statement);
-        db.run('INSERT INTO __migrations (name, applied_at) VALUES (?, ?)', [migration.name, new Date().toISOString()]);
+        const now = new Date().toISOString();
+        db.run('INSERT INTO __migrations (name, applied_at) VALUES (?, ?)', [migration.name, now]);
+        if (building && fresh.length === 0) db.run('INSERT INTO __migrations (name, applied_at) VALUES (?, ?)', [CREATED, now]);
       });
     } catch (error) {
       throw new Error(`Migration ${migration.name} failed: ${(error as Error).message}`, { cause: error });
@@ -33,9 +44,13 @@ export function runMigrations(db: SqlDriver, migrations: readonly Migration[] = 
   return fresh;
 }
 
-/** True when `applied` (what `runMigrations` just did) built the database from nothing. */
-export function isNewDatabase(applied: string[], migrations: readonly Migration[] = MIGRATIONS): boolean {
-  return migrations.length > 0 && applied.includes(migrations[0].name);
+/**
+ * Whether this database was built from nothing by this runner — true for good,
+ * not only on the start that built it. (Databases created before the runner
+ * kept this mark hold real data, and read as not new.)
+ */
+export function isNewDatabase(db: SqlDriver): boolean {
+  return db.all('SELECT 1 FROM __migrations WHERE name = ?', [CREATED]).length > 0;
 }
 
 /**

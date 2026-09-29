@@ -22,14 +22,16 @@ function driver(sqlite: DatabaseSync): SqlDriver {
 function device(name: string, before?: (db: SqlDriver) => void): SqlDriver {
   const db = driver(new DatabaseSync(':memory:'));
   if (before) {
-    // A database from before sync: data exists when the sync migration arrives (on a later start).
+    // A database from before sync: data exists when the sync migration arrives
+    // (on a later start), and the runner of its day did not mark new databases.
     runMigrations(db, MIGRATIONS.filter((m) => m.name < '0011'));
+    db.run("DELETE FROM __migrations WHERE name = '.created'");
     seedSettings(db);
     before(db);
   }
-  const applied = runMigrations(db);
+  runMigrations(db);
   seedSettings(db);
-  installSync(db, { newDatabase: isNewDatabase(applied), name });
+  installSync(db, { newDatabase: isNewDatabase(db), name });
   return db;
 }
 
@@ -82,6 +84,16 @@ describe('installing sync', () => {
     expect(count(phone, 'SELECT * FROM sync_stamps')).toBe(0);
     expect(readMeta(phone).device).toMatch(/^[0-9a-f]{12}$/);
     expect(readMeta(phone).device).not.toBe(readMeta(desktop).device);
+  });
+
+  it('still knows a new database for new after a first start that failed half-way', () => {
+    const db = driver(new DatabaseSync(':memory:'));
+    runMigrations(db);
+    seedSettings(db);
+    // …the app died here, before sync was installed. Next start:
+    expect(runMigrations(db)).toEqual([]);
+    installSync(db, { newDatabase: isNewDatabase(db), name: 'Phone' });
+    expect(count(db, 'SELECT * FROM sync_stamps')).toBe(0);
   });
 
   it('stamps inserts, changed columns and deletions — but nothing a merge writes', () => {
