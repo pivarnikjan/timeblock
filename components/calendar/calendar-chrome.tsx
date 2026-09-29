@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { restoreEventsAction, toggleMultiDayOnlyAction, togglePlanAction, toggleWindowsFrontAction } from '@/app/actions/calendar';
-import { energyColor } from '@/lib/calendar/colors';
+import { energyColor } from '@timeblock/core/calendar/colors';
 import type { CalendarData } from '@/lib/calendar/load';
-import { VIEW_LABEL, VIEWS } from '@/lib/calendar/views';
+import { VIEW_LABEL, VIEWS } from '@timeblock/core/calendar/views';
 import { ToggleForm } from './toggle';
 import { VacationButton } from './vacation-button';
 

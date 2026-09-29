@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Horizon } from '@/lib/db/schema';
-import { indexHorizons } from '@/lib/hierarchy';
+import type { Horizon } from '../db/schema';
+import { indexHorizons } from '../hierarchy';
 import { eventContent } from './event-content';
 
 const horizon = (over: Partial<Horizon> & Pick<Horizon, 'id' | 'level' | 'title'>): Horizon => ({

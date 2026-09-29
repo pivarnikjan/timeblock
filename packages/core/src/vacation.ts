@@ -1,6 +1,6 @@
 import type { DateTime } from 'luxon';
-import type { Vacation } from '@/lib/db/schema';
-import type { Closure } from '@/lib/scheduler/day';
+import type { Vacation } from './db/schema';
+import type { Closure } from './scheduler/day';
 
 /** The `windows` column's token for work with no window. */
 export const ANYTIME = 'anytime';

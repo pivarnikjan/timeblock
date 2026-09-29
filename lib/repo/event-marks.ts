@@ -1,7 +1,7 @@
 import 'server-only';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { eventMarks, type EventMark } from '@/lib/db/schema';
+import { eventMarks, type EventMark } from '@timeblock/core/db/schema';
 import { vacationsBySourceEvent } from './vacations';
 
 export type MarkField = 'important' | 'placeholder' | 'notVacation';

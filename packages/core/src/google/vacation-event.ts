@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import type { calendar_v3 } from 'googleapis';
+import type { GoogleEventBody } from './events';
 
 /** Marks the Google events that mirror a TimeBlock vacation. */
 export const VACATION_ID_KEY = 'tbVacationId';
@@ -17,7 +17,7 @@ export function vacationEventBody(
   v: { id: number; startsAt: string; endsAt: string; note: string | null },
   zone: string,
   windowNames: string[],
-): calendar_v3.Schema$Event {
+): GoogleEventBody {
   const start = DateTime.fromISO(v.startsAt).setZone(zone);
   const end = DateTime.fromISO(v.endsAt).setZone(zone);
   const wholeDays = start.equals(start.startOf('day')) && end.equals(end.startOf('day'));

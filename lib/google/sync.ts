@@ -1,15 +1,15 @@
 import 'server-only';
-import { indexHorizons } from '@/lib/hierarchy';
+import { indexHorizons } from '@timeblock/core/hierarchy';
 import * as blockRepo from '@/lib/repo/blocks';
 import { listAllHorizons } from '@/lib/repo/horizons';
 import { getSettings, updateSettings } from '@/lib/repo/settings';
-import type { Vacation } from '@/lib/db/schema';
-import { blockColorId, colorUpdate, windowColors } from '@/lib/calendar/colors';
+import type { Vacation } from '@timeblock/core/db/schema';
+import { blockColorId, colorUpdate, windowColors } from '@timeblock/core/calendar/colors';
 import { listWindows } from '@/lib/repo/windows';
 import { BLOCK_COLOR_KEY, BLOCK_ID_KEY } from './calendar';
 import { calendarApi, connectionState } from './client';
-import { eventContent } from './event-content';
-import { vacationEventBody } from './vacation-event';
+import { eventContent } from '@timeblock/core/google/event-content';
+import { vacationEventBody } from '@timeblock/core/google/vacation-event';
 
 const CALENDAR_NAME = 'TimeBlock — Focus';
 

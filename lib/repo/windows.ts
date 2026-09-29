@@ -1,8 +1,7 @@
 import 'server-only';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { horizons, settings, tasks, timeWindows, type NewTimeWindow, type TimeWindow } from '@/lib/db/schema';
-import type { WindowSpec } from '@/lib/scheduler/day';
+import { horizons, settings, tasks, timeWindows, type NewTimeWindow, type TimeWindow } from '@timeblock/core/db/schema';
 
 /** Time windows earliest first — the order Settings, the Calendar legend and the planner use. */
 export async function listWindows(): Promise<TimeWindow[]> {
@@ -10,19 +9,6 @@ export async function listWindows(): Promise<TimeWindow[]> {
     .select()
     .from(timeWindows)
     .orderBy(asc(timeWindows.startTime), asc(timeWindows.endTime), asc(timeWindows.name), asc(timeWindows.id));
-}
-
-export function toSpec(w: TimeWindow): WindowSpec {
-  return {
-    id: w.id,
-    name: w.name,
-    start: w.startTime,
-    end: w.endTime,
-    weekdays: w.weekdays
-      .split(',')
-      .map((d) => Number(d.trim()))
-      .filter((d) => d >= 1 && d <= 7),
-  };
 }
 
 export async function createWindow(values: NewTimeWindow): Promise<void> {

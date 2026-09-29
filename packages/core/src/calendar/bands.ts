@@ -1,6 +1,6 @@
 import type { DateTime } from 'luxon';
-import { closuresFor, compareWindows, windowInterval, windowOpensOn, type Closure, type WindowSpec } from '@/lib/scheduler/day';
-import { subtract } from '@/lib/scheduler/intervals';
+import { closuresFor, compareWindows, windowInterval, windowOpensOn, type Closure, type WindowSpec } from '../scheduler/day';
+import { subtract } from '../scheduler/intervals';
 import { windowColors } from './colors';
 
 /** A time window as the Calendar draws and lists it. */

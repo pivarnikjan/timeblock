@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { RITUALS } from '@/lib/db/schema';
+import { RITUALS } from '@timeblock/core/db/schema';
 import { enumOf, str } from '@/lib/forms';
 import { completeRitual } from '@/lib/repo/rituals';
 

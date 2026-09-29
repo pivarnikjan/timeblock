@@ -1,12 +1,12 @@
 import 'server-only';
 import { DateTime } from 'luxon';
-import type { Settings, Vacation } from '@/lib/db/schema';
-import { blockColor, eventColor, windowColors } from '@/lib/calendar/colors';
+import type { Settings, Vacation } from '@timeblock/core/db/schema';
+import { blockColor, eventColor, windowColors } from '@timeblock/core/calendar/colors';
 import { listCalendars, listRangeEvents } from '@/lib/google/calendar';
 import { connectionState, isMissingScopeError, MISSING_SCOPE_HELP } from '@/lib/google/client';
 import * as blockRepo from '@/lib/repo/blocks';
 import { listWindows } from '@/lib/repo/windows';
-import { overlaps } from './overlap';
+import { overlaps } from '@timeblock/core/calendar/overlap';
 
 /** Something already scheduled during a vacation, offered for deletion. */
 export interface Conflict {

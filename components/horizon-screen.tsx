@@ -9,7 +9,7 @@ import {
   updateHorizonAction,
 } from '@/app/actions/horizons';
 import { setTaskStatusAction } from '@/app/actions/tasks';
-import type { Horizon, Task, TimeWindow } from '@/lib/db/schema';
+import type { Horizon, Task, TimeWindow } from '@timeblock/core/db/schema';
 import {
   breadcrumb,
   findUnconnected,
@@ -17,9 +17,9 @@ import {
   remainingMinutes,
   weekOfMonth,
   yearsLabel,
-} from '@/lib/hierarchy';
+} from '@timeblock/core/hierarchy';
 import { loadContext, outlook, type Outlook, type PlanningContext } from '@/lib/planner';
-import { periodFor, resolvePeriod, reviewParentLevel, shift, type Level } from '@/lib/time/periods';
+import { periodFor, resolvePeriod, reviewParentLevel, shift, type Level } from '@timeblock/core/time/periods';
 import { Breadcrumb, OutlookBadge, ProgressBar } from '@/components/progress';
 import { Button, Card, Chip, EmptyState, Field, Input, PageHeader, Select, Textarea } from '@/components/ui';
 

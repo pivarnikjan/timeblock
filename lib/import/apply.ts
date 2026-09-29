@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { eq } from 'drizzle-orm';
 import type { Db } from '@/lib/db/client';
-import { horizons, tasks } from '@/lib/db/schema';
+import { horizons, tasks } from '@timeblock/core/db/schema';
 import { extendYearGoal } from '@/lib/db/year-goals';
 import type { ImportPlan } from './tasks-csv';
 

@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@timeblock/core/*": ["./packages/core/src/*"]
     }
   },
   "include": [

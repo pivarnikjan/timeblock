@@ -1,7 +1,7 @@
 import 'server-only';
 import { and, asc, eq, gt, isNotNull, lt } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { vacations, type Vacation } from '@/lib/db/schema';
+import { vacations, type Vacation } from '@timeblock/core/db/schema';
 
 /** Vacations that have not ended by `after` (UTC ISO), earliest first — all when omitted. */
 export async function listVacations(after?: string): Promise<Vacation[]> {

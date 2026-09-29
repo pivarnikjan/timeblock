@@ -19,7 +19,7 @@ import {
 import { eventKey, isHidden, parseFilters } from './filters';
 import { layoutColumns, layoutLanes } from './layout';
 import { multiDayReviews, spanLabel } from './multi-day';
-import type { CalendarEvent } from '@/lib/google/calendar';
+import type { CalendarEvent } from '../google/events';
 import { calendarHref, calendarRange, parseView, visibleHours } from './views';
 
 const TZ = 'Europe/Vienna';

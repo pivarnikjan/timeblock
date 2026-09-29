@@ -5,7 +5,7 @@ import { DateTime } from 'luxon';
 import { useActionState, type MouseEvent } from 'react';
 import { planCalendarAction, type PlanCalendarState } from '@/app/actions/plan';
 import { Button } from '@/components/ui';
-import { formatMinutes } from '@/lib/hierarchy';
+import { formatMinutes } from '@timeblock/core/hierarchy';
 
 const day = (date: string) => DateTime.fromISO(date).toFormat('ccc d LLL');
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;

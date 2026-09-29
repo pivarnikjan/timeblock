@@ -2,9 +2,9 @@ import 'server-only';
 import { google } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
 import { oauthApp, readCredentials, redirectUri, writeCredentials } from './credentials';
-import { grantsCalendar, SCOPES } from './scopes';
+import { grantsCalendar, SCOPES } from '@timeblock/core/google/scopes';
 
-export { CALENDAR_SCOPE, SCOPES, grantsCalendar, isMissingScopeError, MISSING_SCOPE_HELP } from './scopes';
+export { CALENDAR_SCOPE, SCOPES, grantsCalendar, isMissingScopeError, MISSING_SCOPE_HELP } from '@timeblock/core/google/scopes';
 
 export class NotConfiguredError extends Error {
   constructor() {

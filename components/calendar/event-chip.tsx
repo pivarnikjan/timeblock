@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
 import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
-import { calendarHref } from '@/lib/calendar/views';
+import { calendarHref } from '@timeblock/core/calendar/views';
 
 /**
  * Colours for a calendar item, the way Google draws them: solid event colour

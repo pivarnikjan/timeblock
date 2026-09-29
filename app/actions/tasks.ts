@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { ENERGY } from '@/lib/db/schema';
+import { ENERGY } from '@timeblock/core/db/schema';
 import { enumOf, num, optNum, optStr, str } from '@/lib/forms';
 import * as repo from '@/lib/repo/tasks';
 

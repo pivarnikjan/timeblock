@@ -1,8 +1,8 @@
 import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
-import { windowBands } from '@/lib/calendar/bands';
-import { overlaps } from '@/lib/calendar/overlap';
-import { vacationPieces } from '@/lib/calendar/vacation-overlay';
+import { windowBands } from './calendar/bands';
+import { overlaps } from './calendar/overlap';
+import { vacationPieces } from './calendar/vacation-overlay';
 import { closedWindows, formatWindows, formInputs, vacationClosures } from './vacation';
 
 const TZ = 'Europe/Vienna';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Horizon, Task } from '@/lib/db/schema';
+import type { Horizon, Task } from './db/schema';
 import {
   absorbedYearGoals,
   availability,

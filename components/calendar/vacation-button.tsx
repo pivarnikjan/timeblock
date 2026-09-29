@@ -3,8 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { deleteVacationAction } from '@/app/actions/vacation';
-import type { WindowLegend } from '@/lib/calendar/bands';
-import { calendarHref, type CalendarView } from '@/lib/calendar/views';
+import type { WindowLegend } from '@timeblock/core/calendar/bands';
+import { calendarHref, type CalendarView } from '@timeblock/core/calendar/views';
 import { VacationForm } from './vacation-form';
 
 /**

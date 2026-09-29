@@ -9,13 +9,13 @@ import { PlanningPanel } from '@/components/planning-panel';
 import { loadCalendarView, loadMultiDayReviews } from '@/lib/calendar/load';
 import { MultiDayReviewList } from '@/components/calendar/multi-day-review';
 import { vacationConflicts } from '@/lib/calendar/vacation-conflicts';
-import { parseView } from '@/lib/calendar/views';
+import { parseView } from '@timeblock/core/calendar/views';
 import { busySpans } from '@/lib/google/calendar';
 import { loadDay } from '@/lib/planner';
 import * as blockRepo from '@/lib/repo/blocks';
 import { getVacation } from '@/lib/repo/vacations';
 import { getSettings } from '@/lib/repo/settings';
-import { nowIn } from '@/lib/time/periods';
+import { nowIn } from '@timeblock/core/time/periods';
 
 export const dynamic = 'force-dynamic';
 

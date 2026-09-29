@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { busySpans } from '@/lib/calendar/busy';
+import { busySpans } from '../calendar/busy';
 import { VACATION_ID_KEY, vacationEventBody } from './vacation-event';
 
 const TZ = 'Europe/Vienna';

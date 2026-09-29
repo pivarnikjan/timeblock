@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { db, sqlite } from '@/lib/db/client';
-import { breadcrumb, indexHorizons } from '@/lib/hierarchy';
+import { breadcrumb, indexHorizons } from '@timeblock/core/hierarchy';
 import { applyImport } from '@/lib/import/apply';
 import { parseImport, planImport, type ImportIssue, type ImportPlan } from '@/lib/import/tasks-csv';
 import { listAllHorizons } from '@/lib/repo/horizons';

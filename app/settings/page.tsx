@@ -11,10 +11,10 @@ import {
 import { restoreEventsAction, toggleCalendarAction, updateCalendarSettingsAction } from '@/app/actions/calendar';
 import { ToggleForm } from '@/components/calendar/toggle';
 import { CsvImportForm } from '@/components/csv-import-form';
-import { WINDOW_PALETTE, windowColors } from '@/lib/calendar/colors';
-import { parseFilters } from '@/lib/calendar/filters';
-import { VIEW_LABEL, VIEWS } from '@/lib/calendar/views';
-import type { Settings, TimeWindow } from '@/lib/db/schema';
+import { WINDOW_PALETTE, windowColors } from '@timeblock/core/calendar/colors';
+import { parseFilters } from '@timeblock/core/calendar/filters';
+import { VIEW_LABEL, VIEWS } from '@timeblock/core/calendar/views';
+import type { Settings, TimeWindow } from '@timeblock/core/db/schema';
 import { listWindows } from '@/lib/repo/windows';
 import { listCalendars, type CalendarSummary } from '@/lib/google/calendar';
 import { connectionState } from '@/lib/google/client';

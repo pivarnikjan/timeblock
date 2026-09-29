@@ -1,7 +1,7 @@
 import { eq, inArray } from 'drizzle-orm';
-import { absorbedYearGoals } from '@/lib/hierarchy';
+import { absorbedYearGoals } from '@timeblock/core/hierarchy';
 import type { Db } from './client';
-import { horizons, tasks } from './schema';
+import { horizons, tasks } from '@timeblock/core/db/schema';
 
 /**
  * Makes `goalId` run until the end of `untilYear` (never before its own first

@@ -1,6 +1,6 @@
-import type { Energy } from '@/lib/db/schema';
-import { ENERGY_COLOR_ID } from '@/lib/calendar/colors';
-import { breadcrumb, formatMinutes, type HorizonIndex } from '@/lib/hierarchy';
+import type { Energy } from '../db/schema';
+import { ENERGY_COLOR_ID } from '../calendar/colors';
+import { breadcrumb, formatMinutes, type HorizonIndex } from '../hierarchy';
 
 export interface EventSegment {
   minutes: number;

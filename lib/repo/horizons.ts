@@ -1,7 +1,7 @@
 import 'server-only';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { horizons, type Horizon, type NewHorizon } from '@/lib/db/schema';
+import { horizons, type Horizon, type NewHorizon } from '@timeblock/core/db/schema';
 
 /** Every horizon, any level or status — the hierarchy is always resolved whole. */
 export async function listAllHorizons(): Promise<Horizon[]> {

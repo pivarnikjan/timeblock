@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import type { Settings } from '@/lib/db/schema';
+import type { Settings, TimeWindow } from '../db/schema';
 import { clamp, isEmpty, merge, minutes, pad, subtract, type Interval } from './intervals';
 
 /**
@@ -41,6 +41,20 @@ export interface WindowSpec {
   end: string;
   /** ISO weekdays, 1 = Monday … 7 = Sunday. */
   weekdays: number[];
+}
+
+/** A stored time window as the planner reads it. */
+export function toSpec(w: Pick<TimeWindow, 'id' | 'name' | 'startTime' | 'endTime' | 'weekdays'>): WindowSpec {
+  return {
+    id: w.id,
+    name: w.name,
+    start: w.startTime,
+    end: w.endTime,
+    weekdays: w.weekdays
+      .split(',')
+      .map((d) => Number(d.trim()))
+      .filter((d) => d >= 1 && d <= 7),
+  };
 }
 
 /**

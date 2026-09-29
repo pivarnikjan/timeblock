@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { blocks, eventMarks, horizons, settings, tasks, timeWindows, vacations } from './schema';
+import { blocks, eventMarks, horizons, settings, tasks, timeWindows, vacations } from '@timeblock/core/db/schema';
 import { testDb } from './testing';
 
 describe('sqlite-proxy bridge over node:sqlite', () => {

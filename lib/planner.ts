@@ -1,6 +1,6 @@
 import 'server-only';
 import { DateTime } from 'luxon';
-import type { Horizon, Settings, Task, TimeWindow } from '@/lib/db/schema';
+import type { Horizon, Settings, Task, TimeWindow } from '@timeblock/core/db/schema';
 import { busySpans, listDayEvents, listRangeEvents, type CalendarEvent } from '@/lib/google/calendar';
 import { connectionState, isMissingScopeError, MISSING_SCOPE_HELP, type ConnectionState } from '@/lib/google/client';
 import { commitBlocks, moveEvent, removeBlockEvents, syncBlockColors } from '@/lib/google/sync';
@@ -17,34 +17,35 @@ import {
   type HorizonIndex,
   type Progress,
   type SequencePosition,
-} from '@/lib/hierarchy';
+} from '@timeblock/core/hierarchy';
 import * as blockRepo from '@/lib/repo/blocks';
 import { freeEventKeys } from '@/lib/repo/event-marks';
 import { listAllHorizons } from '@/lib/repo/horizons';
 import { getSettings } from '@/lib/repo/settings';
 import { listAllTasks } from '@/lib/repo/tasks';
 import { listVacations } from '@/lib/repo/vacations';
-import { listWindows, toSpec } from '@/lib/repo/windows';
+import { listWindows } from '@/lib/repo/windows';
 import {
   anytimeWindow,
   atLocalTime,
   closuresFor,
   freeSlots,
   openSlots,
+  toSpec,
   windowInterval,
   windowOpensOn,
   type BusySpan,
   type Closure,
   type DayShape,
   type WindowSpec,
-} from '@/lib/scheduler/day';
-import { dueAfter, forecast, planRange, type ForecastTask, type SessionDays } from '@/lib/scheduler/forecast';
-import { isoWeek, sequentialAgenda, type ChainTask } from '@/lib/scheduler/sequential';
-import type { Interval } from '@/lib/scheduler/intervals';
-import { packWindow, planDay, type Plan, type PlannableTask } from '@/lib/scheduler/plan';
-import { conflictOf, diffBlocks, doneAheadAt, whenDone } from '@/lib/scheduler/reschedule';
-import { nowIn } from '@/lib/time/periods';
-import { vacationClosures } from '@/lib/vacation';
+} from '@timeblock/core/scheduler/day';
+import { dueAfter, forecast, planRange, type ForecastTask, type SessionDays } from '@timeblock/core/scheduler/forecast';
+import { isoWeek, sequentialAgenda, type ChainTask } from '@timeblock/core/scheduler/sequential';
+import type { Interval } from '@timeblock/core/scheduler/intervals';
+import { packWindow, planDay, type Plan, type PlannableTask } from '@timeblock/core/scheduler/plan';
+import { conflictOf, diffBlocks, doneAheadAt, whenDone } from '@timeblock/core/scheduler/reschedule';
+import { nowIn } from '@timeblock/core/time/periods';
+import { vacationClosures } from '@timeblock/core/vacation';
 
 /** How far ahead the forecast looks: long enough to see a month's work land. */
 export const FORECAST_DAYS = 42;

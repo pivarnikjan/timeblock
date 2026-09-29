@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import type { CalendarEvent } from '@/lib/google/calendar';
+import type { CalendarEvent } from '../google/events';
 import { eventKey, occurrenceKey } from './filters';
 
 /** Spans more than one day: all-day over several dates, or timed and 24h+. */

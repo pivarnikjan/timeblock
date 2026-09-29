@@ -1,4 +1,4 @@
-import type { Energy } from '@/lib/db/schema';
+import type { Energy } from '../db/schema';
 
 /**
  * Google Calendar's colours, as its web app shows them.

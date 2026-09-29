@@ -3,9 +3,9 @@ import { DateTime } from 'luxon';
 import { setNotVacationAction } from '@/app/actions/calendar';
 import { matchEventAction } from '@/app/actions/vacation';
 import type { CalendarData } from '@/lib/calendar/load';
-import { spanLabel, type MultiDayReview } from '@/lib/calendar/multi-day';
-import { calendarHref } from '@/lib/calendar/views';
-import { formInputs } from '@/lib/vacation';
+import { spanLabel, type MultiDayReview } from '@timeblock/core/calendar/multi-day';
+import { calendarHref } from '@timeblock/core/calendar/views';
+import { formInputs } from '@timeblock/core/vacation';
 import { VacationForm } from './vacation-form';
 
 const LINK = 'text-accent underline underline-offset-2';

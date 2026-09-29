@@ -1,0 +1,15 @@
+{
+  "name": "@timeblock/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "What the TimeBlock desktop app and phone app share: the database schema and migrations, planning, calendar layout, and sync.",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "peerDependencies": {
+    "drizzle-orm": ">=0.45",
+    "fflate": ">=0.8",
+    "luxon": ">=3.7"
+  }
+}

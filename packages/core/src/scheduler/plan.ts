@@ -1,5 +1,5 @@
 import type { DateTime } from 'luxon';
-import type { Energy } from '@/lib/db/schema';
+import type { Energy } from '../db/schema';
 import {
   anytimeWindow,
   closuresFor,

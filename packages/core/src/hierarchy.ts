@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import type { Horizon, Task } from '@/lib/db/schema';
+import type { Horizon, Task } from './db/schema';
 
 /**
  * How the levels connect: every task serves exactly one week priority or month

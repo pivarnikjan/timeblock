@@ -1,5 +1,5 @@
-import type { CalendarEvent } from '@/lib/google/calendar';
-import type { BusySpan } from '@/lib/scheduler/day';
+import type { CalendarEvent } from '../google/events';
+import type { BusySpan } from '../scheduler/day';
 import { eventKey, occurrenceKey } from './filters';
 
 /**
