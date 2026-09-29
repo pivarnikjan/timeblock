@@ -29,6 +29,7 @@ export const TEMPLATE_COLUMNS = [
   'due_date',
   'status',
   'window',
+  'sequential',
   'notes',
 ] as const;
 
@@ -49,7 +50,12 @@ export interface RowTask {
   dueDate: string | null;
   status: 'backlog' | 'active';
   notes: string | null;
+  /** A session of an ordered plan (see lib/scheduler/sequential.ts); null when the file has no such column. */
+  sequential: boolean | null;
 }
+
+const YES = ['yes', 'y', 'true', '1', 'x', 'ano', 'áno', 'a'];
+const NO = ['', 'no', 'n', 'false', '0', 'nie'];
 
 export interface ImportRow {
   line: number;
@@ -171,9 +177,17 @@ export function parseImport(text: string, windows: Pick<TimeWindow, 'id' | 'name
     if (monthTitle && !month) fail(`Month outcome "${monthTitle}" needs a month (e.g. 2026-10).`);
 
     let year: DateTime | null = null;
+    // A goal over several years: "2026-2027" runs from 1 Jan 2026 to 31 Dec 2027.
+    let lastYear: number | null = null;
     if (yearRaw) {
-      year = /^\d{4}$/.test(yearRaw) ? DateTime.fromObject({ year: +yearRaw, month: 1, day: 1 }) : null;
-      if (!year) fail(`Cannot read year "${yearRaw}" — use 2026.`);
+      const range = /^(\d{4})\s*[-–—]\s*(\d{4})$/.exec(yearRaw);
+      if (range && +range[2] >= +range[1]) {
+        year = DateTime.fromObject({ year: +range[1], month: 1, day: 1 });
+        lastYear = +range[2];
+      } else {
+        year = /^\d{4}$/.test(yearRaw) ? DateTime.fromObject({ year: +yearRaw, month: 1, day: 1 }) : null;
+      }
+      if (!year) fail(`Cannot read year "${yearRaw}" — use 2026, or 2026-2027 for a goal over several years.`);
     } else if (month) {
       year = month.startOf('year');
     }
@@ -213,6 +227,9 @@ export function parseImport(text: string, windows: Pick<TimeWindow, 'id' | 'name
       const dueDate = dueRaw ? parseLocalDate(dueRaw) : null;
       if (dueRaw && !dueDate) fail(`Cannot read due date "${dueRaw}" — use 2026-10-05 or 5.10.2026.`);
 
+      const sequentialRaw = row.get('sequential').toLowerCase();
+      if (!YES.includes(sequentialRaw) && !NO.includes(sequentialRaw)) fail(`Sequential must be yes or no, got "${sequentialRaw}".`);
+
       if (!weekTitle && !monthTitle && !yearTitle) {
         warnings.push({ line: row.line, message: `"${taskTitle}" serves no goal; it will be listed under Not connected.` });
       } else if (!weekTitle && monthTitle && !dueDate) {
@@ -227,6 +244,8 @@ export function parseImport(text: string, windows: Pick<TimeWindow, 'id' | 'name
         dueDate,
         status: (statusRaw || 'backlog') as 'backlog' | 'active',
         notes: row.get('notes') || null,
+        // Without the column, a re-import leaves the flag as it is (it may have been set on the Tasks screen).
+        sequential: table.headers.includes('sequential') ? YES.includes(sequentialRaw) : null,
       };
     }
 
@@ -244,6 +263,7 @@ export function parseImport(text: string, windows: Pick<TimeWindow, 'id' | 'name
       chain.push({ level, title, periodStart: p.start, periodEnd: p.end });
     };
     if (yearTitle && year) push('year', yearTitle, year);
+    if (yearTitle && year && lastYear !== null) chain[chain.length - 1].periodEnd = `${lastYear}-12-31`;
     if (monthTitle && month) push('month', monthTitle, month);
     if (weekTitle && week) push('week', weekTitle, week);
 
@@ -260,7 +280,8 @@ export const horizonKey = (h: { level: Level; periodStart: string; title: string
 
 export type ImportOp =
   | { kind: 'create-horizon'; key: string; horizon: RowHorizon; parentKey: string | null; windowId: number | null; line: number }
-  | { kind: 'update-horizon'; key: string; id: number; parentKey: string | null; windowId: number | null; line: number }
+  /** `periodEnd` is set when the file makes a stored yearly goal run longer (2026 → 2026-2027). */
+  | { kind: 'update-horizon'; key: string; id: number; parentKey: string | null; windowId: number | null; periodEnd?: string; line: number }
   | { kind: 'create-task'; horizonKey: string | null; task: RowTask; windowId: number | null; sortOrder: number; line: number }
   | { kind: 'update-task'; id: number; horizonKey: string | null; task: RowTask; windowId: number | null; sortOrder: number; line: number };
 
@@ -284,10 +305,29 @@ export interface ImportPlan {
  * from the file; its status and ticked-off progress are never touched. A goal
  * matched on level + period + title has its parent (and window, when the row
  * sets one) brought in line with the file.
+ *
+ * A yearly goal over several years ("2026-2027" in the file, or one already
+ * stored) is one goal: every row naming it with a year inside its range — the
+ * plan's "2027" row, or tasks whose year comes from a 2027 month — lands on it.
  */
 export function planImport(rows: ImportRow[], horizons: Horizon[], tasks: Task[], nextSortOrder: number): ImportPlan {
   const existing = new Map(horizons.map((h) => [horizonKey(h), h.id]));
+  const storedEnd = new Map(horizons.map((h) => [h.id, h.periodEnd]));
   const norm = (title: string) => title.trim().toLowerCase();
+
+  const multiYear = (h: { periodStart: string; periodEnd: string }) => h.periodStart.slice(0, 4) !== h.periodEnd.slice(0, 4);
+  const spans = [
+    ...rows.flatMap((r) => r.chain.filter((h) => h.level === 'year' && multiYear(h))),
+    ...horizons.filter((h) => h.level === 'year' && multiYear(h)),
+  ];
+  const canonical = (h: RowHorizon): RowHorizon => {
+    if (h.level !== 'year') return h;
+    const span = spans
+      .filter((s) => norm(s.title) === norm(h.title) && s.periodStart <= h.periodStart && s.periodEnd >= h.periodEnd)
+      .sort((a, b) => a.periodStart.localeCompare(b.periodStart) || b.periodEnd.localeCompare(a.periodEnd))[0];
+    return span ? { ...h, periodStart: span.periodStart, periodEnd: span.periodEnd } : h;
+  };
+  rows = rows.map((r) => ({ ...r, chain: r.chain.map(canonical) }));
 
   const ops: ImportOp[] = [];
   const horizonOp = new Map<string, number>();
@@ -315,7 +355,9 @@ export function planImport(rows: ImportRow[], horizons: Horizon[], tasks: Task[]
       if (seen !== undefined) {
         if (windowId !== null) (ops[seen] as { windowId: number | null }).windowId = windowId;
       } else if (existing.has(key)) {
-        horizonOp.set(key, ops.push({ kind: 'update-horizon', key, id: existing.get(key)!, parentKey, windowId, line: row.line }) - 1);
+        const id = existing.get(key)!;
+        const longer = h.level === 'year' && h.periodEnd > (storedEnd.get(id) ?? h.periodEnd) ? { periodEnd: h.periodEnd } : {};
+        horizonOp.set(key, ops.push({ kind: 'update-horizon', key, id, parentKey, windowId, ...longer, line: row.line }) - 1);
         bucket(h.level).updated += 1;
       } else {
         horizonOp.set(key, ops.push({ kind: 'create-horizon', key, horizon: h, parentKey, windowId, line: row.line }) - 1);

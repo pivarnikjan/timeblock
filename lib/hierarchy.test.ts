@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Horizon, Task } from '@/lib/db/schema';
 import {
+  absorbedYearGoals,
   availability,
   breadcrumb,
   effectiveDeadline,
@@ -13,6 +14,7 @@ import {
   remainingMinutes,
   sequencePositions,
   weekOfMonth,
+  yearsLabel,
 } from './hierarchy';
 
 const horizon = (over: Partial<Horizon> & Pick<Horizon, 'id' | 'level' | 'title'>): Horizon => ({
@@ -39,6 +41,7 @@ const task = (over: Partial<Task> & Pick<Task, 'id' | 'title'>): Task => ({
   sortOrder: 0,
   createdAt: '2026-09-24T00:00:00Z',
   completedAt: null,
+  sequential: false,
   ...over,
 });
 
@@ -238,5 +241,21 @@ describe('sequence positions', () => {
     expect(positions.get(1)!.key).not.toBe(positions.get(2)!.key);
     expect(positions.get(3)!.key).toBe('week:23');
     expect(positions.has(4)).toBe(false);
+  });
+});
+
+describe('yearly goals over several years', () => {
+  const goal = (id: number, title: string, start: string, end: string) =>
+    horizon({ id, level: 'year', title, periodStart: start, periodEnd: end });
+
+  it('labels the years it runs over', () => {
+    expect(yearsLabel(goal(1, 'Fit', '2026-01-01', '2027-12-31'))).toBe('2026 – 2027');
+    expect(yearsLabel(goal(1, 'Fit', '2026-01-01', '2026-12-31'))).toBe('2026');
+  });
+
+  it('takes in same-titled goals inside its years, and nothing else', () => {
+    const fit = goal(1, 'My Fitness', '2026-01-01', '2027-12-31');
+    const all = [fit, goal(2, ' my fitness ', '2027-01-01', '2027-12-31'), goal(3, 'My Fitness', '2028-01-01', '2028-12-31'), goal(4, 'Other', '2027-01-01', '2027-12-31')];
+    expect(absorbedYearGoals(fit, all).map((h) => h.id)).toEqual([2]);
   });
 });

@@ -16,6 +16,7 @@ import {
   formatMinutes,
   remainingMinutes,
   weekOfMonth,
+  yearsLabel,
 } from '@/lib/hierarchy';
 import { loadContext, outlook, type Outlook, type PlanningContext } from '@/lib/planner';
 import { periodFor, resolvePeriod, reviewParentLevel, shift, type Level } from '@/lib/time/periods';
@@ -69,8 +70,11 @@ export async function HorizonScreen({ level, date }: { level: ReviewLevel; date?
 
   const period = resolvePeriod(level, ctx.settings.timezone, date);
   const anchor = DateTime.fromISO(period.start, { zone: ctx.settings.timezone });
+  // A yearly goal over several years is listed on each of them.
   const items = ctx.horizons
-    .filter((h) => h.level === level && h.periodStart === period.start)
+    .filter((h) =>
+      h.level === level && (level === 'year' ? h.periodStart <= period.end && h.periodEnd >= period.start : h.periodStart === period.start),
+    )
     .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 
   const parentLevel = reviewParentLevel(level);
@@ -122,7 +126,7 @@ export async function HorizonScreen({ level, date }: { level: ReviewLevel; date?
               scope={scope}
               parentOptions={parentOptions}
               parentLevel={parentLevel}
-              periodEnd={period.end}
+              period={period}
             />
           ))}
         </ul>
@@ -147,6 +151,7 @@ export async function HorizonScreen({ level, date }: { level: ReviewLevel; date?
           <Field label="Time window for everything below">
             <WindowSelect windows={ctx.windows} />
           </Field>
+          {level === 'year' && <UntilYearField firstYear={Number(period.start.slice(0, 4))} />}
           <div className="sm:col-span-2">
             <Field label="Why it matters / what done looks like">
               <Textarea name="description" rows={2} />
@@ -204,6 +209,25 @@ function ParentSelect({ options, selected }: { options: Horizon[]; selected?: nu
   );
 }
 
+/**
+ * "Runs until": the last year of a yearly goal. Running into a later year makes
+ * it one goal over both, and takes in a same-titled goal set for that year.
+ */
+function UntilYearField({ firstYear, selected }: { firstYear: number; selected?: number }) {
+  const years = Array.from({ length: 6 }, (_, i) => firstYear + i);
+  return (
+    <Field label="Runs until">
+      <Select name="untilYear" defaultValue={selected ?? firstYear}>
+        {years.map((y) => (
+          <option key={y} value={y}>
+            {y === firstYear ? `${y} (this year only)` : `end of ${y}`}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  );
+}
+
 export function WindowSelect({ windows, selected }: { windows: TimeWindow[]; selected?: number | null }) {
   return (
     <Select name="windowId" defaultValue={selected ?? ''}>
@@ -226,13 +250,14 @@ function HorizonCard({
   scope,
   parentOptions,
   parentLevel,
-  periodEnd,
+  period,
 }: {
   horizon: Horizon;
   scope: Scope;
   parentOptions: Horizon[];
   parentLevel: Level | null;
-  periodEnd: string;
+  /** The period on screen: a goal over several years shows this year's part. */
+  period: { start: string; end: string };
 }) {
   const { ctx } = scope;
   const done = horizon.status === 'done';
@@ -249,6 +274,9 @@ function HorizonCard({
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <OutlookBadge outlook={scope.outlook.horizons.get(horizon.id)} />
             {ownWindow && <Chip title="Everything below inherits this window">⏱ {ownWindow}</Chip>}
+            {horizon.level === 'year' && horizon.periodStart.slice(0, 4) !== horizon.periodEnd.slice(0, 4) && (
+              <Chip title="One goal over several years; listed on each of them">📅 {yearsLabel(horizon)}</Chip>
+            )}
             {horizon.status === 'dropped' && <Chip>dropped</Chip>}
           </div>
         </div>
@@ -256,7 +284,7 @@ function HorizonCard({
       </div>
 
       <div className="border-t border-border px-4 py-3">
-        {horizon.level === 'year' && <YearTree horizon={horizon} scope={scope} />}
+        {horizon.level === 'year' && <YearTree horizon={horizon} scope={scope} period={period} />}
         {horizon.level === 'month' && <MonthDetail horizon={horizon} scope={scope} />}
         {horizon.level === 'week' && <WeekDetail horizon={horizon} scope={scope} />}
       </div>
@@ -279,6 +307,9 @@ function HorizonCard({
             <Field label="Time window for everything below">
               <WindowSelect windows={ctx.windows} selected={horizon.windowId} />
             </Field>
+            {horizon.level === 'year' && (
+              <UntilYearField firstYear={Number(horizon.periodStart.slice(0, 4))} selected={Number(horizon.periodEnd.slice(0, 4))} />
+            )}
             <div className="sm:col-span-2">
               <Field label="Why it matters / what done looks like">
                 <Textarea name="description" rows={2} defaultValue={horizon.description ?? ''} />
@@ -293,7 +324,7 @@ function HorizonCard({
             <StatusButton id={horizon.id} status="active" current={horizon.status} label="Active" />
             <StatusButton id={horizon.id} status="done" current={horizon.status} label="Done" />
             <StatusButton id={horizon.id} status="dropped" current={horizon.status} label="Dropped" />
-            <span className="text-xs text-muted">Period ends {periodEnd}</span>
+            <span className="text-xs text-muted">Period ends {horizon.periodEnd}</span>
             <form action={deleteHorizonAction} className="ml-auto">
               <input type="hidden" name="id" value={horizon.id} />
               <Button tone="danger" type="submit">
@@ -368,14 +399,23 @@ function TaskLine({ task, scope, showForecast = true }: { task: Task; scope: Sco
   );
 }
 
-function YearTree({ horizon, scope }: { horizon: Horizon; scope: Scope }) {
-  const months = scope.childrenOf(horizon.id);
+function YearTree({ horizon, scope, period }: { horizon: Horizon; scope: Scope; period: { start: string; end: string } }) {
+  const all = scope.childrenOf(horizon.id);
+  // A goal over several years shows the months of the year on screen; the rest are on their own year.
+  const months = all.filter((m) => m.periodStart <= period.end && m.periodEnd >= period.start);
+  const elsewhere = all.length - months.length;
   const own = scope.tasksOf(horizon.id);
-  if (months.length === 0 && own.length === 0) {
+  if (all.length === 0 && own.length === 0) {
     return <p className="text-xs text-muted">No monthly outcomes serve this goal yet — add them on the Month screen.</p>;
   }
   return (
     <div>
+      {elsewhere > 0 && (
+        <p className="pb-1 text-xs text-muted">
+          {period.start.slice(0, 4)}&apos;s months below · {elsewhere} more {elsewhere === 1 ? 'is' : 'are'} on the other years
+          of {yearsLabel(horizon)}.
+        </p>
+      )}
       {months.map((month) => (
         <Row key={month.id} horizon={month} scope={scope} label={`${DateTime.fromISO(month.periodStart).toFormat('LLL yyyy')} · ${month.title}`}>
           <MonthDetail horizon={month} scope={scope} />

@@ -112,6 +112,7 @@ export default async function TasksPage() {
           <Field label="Time window">
             <WindowSelect windows={windows} />
           </Field>
+          <SequentialField />
           <div className="sm:col-span-2">
             <Field label="Notes">
               <Textarea name="notes" rows={2} />
@@ -165,6 +166,22 @@ export default async function TasksPage() {
 }
 
 type Option = Horizon & { group: string };
+
+/** The "sequential session" box: one a day, in order, a week's sessions inside one week. */
+function SequentialField({ checked = false }: { checked?: boolean }) {
+  return (
+    <label className="flex items-start gap-2 text-sm sm:col-span-2">
+      <input type="checkbox" name="sequential" defaultChecked={checked} className="mt-1" />
+      <span>
+        Sequential session
+        <span className="block text-xs text-muted">
+          Like a training plan: never two on one day, never before the one ahead of it is done, and a week&apos;s
+          sessions all within one week — an interrupted week starts again from its first session.
+        </span>
+      </span>
+    </label>
+  );
+}
 
 function HorizonSelect({ options, selected, byId }: { options: Option[]; selected?: number | null; byId: HorizonIndex }) {
   const groups = [...new Set(options.map((o) => o.group))];
@@ -264,6 +281,7 @@ function TaskRow({
             <Field label="Time window">
               <WindowSelect windows={windows} selected={task.windowId} />
             </Field>
+            <SequentialField checked={task.sequential} />
             <div className="sm:col-span-2">
               <Field label="Notes">
                 <Textarea name="notes" rows={2} defaultValue={task.notes ?? ''} />

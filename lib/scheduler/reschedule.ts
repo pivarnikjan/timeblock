@@ -32,6 +32,39 @@ export function conflictOf(
   return null;
 }
 
+/** A block with the tick times of its work (`doneAt`: UTC ISO, null = not ticked). */
+export interface TickedBlock {
+  startsAt: string;
+  endsAt: string;
+  segments: { doneAt: string | null }[];
+}
+
+/**
+ * When a block's work was ticked off before the block even began — done ahead
+ * of plan — the moment the last of it was ticked; null otherwise. Such a block
+ * holds history in a slot that is still to come, and that slot is free again.
+ */
+export function doneAheadAt(block: TickedBlock, now: string): string | null {
+  const ticks = block.segments.flatMap((s) => (s.doneAt ? [ms(s.doneAt)] : []));
+  if (ticks.length === 0 || ms(block.startsAt) <= ms(now)) return null;
+  const last = Math.max(...ticks);
+  return last < ms(block.startsAt) ? DateTime.fromMillis(last).toUTC().toISO()! : null;
+}
+
+/**
+ * Where a block done ahead of plan belongs as history: ending when its work was
+ * ticked off (rounded up to 5 minutes), just as long as it was planned.
+ */
+export function whenDone(block: Pick<TickedBlock, 'startsAt' | 'endsAt'>, doneAt: string, zone: string): { date: string; startsAt: string; endsAt: string } {
+  const done = DateTime.fromISO(doneAt).setZone(zone);
+  const end = done.minute % 5 === 0 && done.second === 0 && done.millisecond === 0
+    ? done
+    : done.startOf('minute').plus({ minutes: 5 - (done.minute % 5) });
+  const length = ms(block.endsAt) - ms(block.startsAt);
+  const start = end.minus({ milliseconds: length });
+  return { date: start.toISODate()!, startsAt: start.toUTC().toISO()!, endsAt: end.toUTC().toISO()! };
+}
+
 const signature = (b: PlacedBlock) =>
   [ms(b.startsAt), ms(b.endsAt), b.windowId ?? '-', ...b.segments.map((s) => `${s.taskId}:${s.minutes}`)].join('|');
 

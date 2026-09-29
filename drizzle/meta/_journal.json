@@ -64,6 +64,20 @@
       "when": 1790516541495,
       "tag": "0008_vacation_in_google",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790689431761,
+      "tag": "0009_multi_day_classification",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790693610410,
+      "tag": "0010_sequential_tasks",
+      "breakpoints": true
     }
   ]
 }

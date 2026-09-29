@@ -157,6 +157,24 @@ describe('importing', () => {
     expect(after).toMatchObject({ estimateMin: 60, status: 'done' });
   });
 
+  it('reads the sequential column, and a file without it leaves the flag alone', async () => {
+    const header = 'year_goal,month_outcome,month,task,duration,due_date,sequential\n';
+    const rows = (flag: string) =>
+      `My Fitness,Fáza 1,2026-10,Tréning A · týž. 1,45,2026-09-28,${flag}\nMy Fitness,Fáza 1,2026-10,Týždenná kontrola · týž. 1,10,2026-09-29,\n`;
+    const first = await importInto(header + rows('áno'));
+    const flags = async (env: typeof first) => Object.fromEntries((await env.db.select().from(tasks)).map((t) => [t.title, t.sequential]));
+    expect(first.parsed.errors).toEqual([]);
+    expect(await flags(first)).toEqual({ 'Tréning A · týž. 1': true, 'Týždenná kontrola · týž. 1': false });
+
+    const withoutColumn = header.replace(',sequential', '') + rows('').replace(/,\n/g, '\n');
+    const second = await importInto(withoutColumn, first);
+    expect(second.parsed.errors).toEqual([]);
+    expect(await flags(second)).toEqual({ 'Tréning A · týž. 1': true, 'Týždenná kontrola · týž. 1': false });
+
+    const bad = await importInto(header + rows('maybe'));
+    expect(bad.parsed.errors[0].message).toContain('Sequential must be yes or no');
+  });
+
   it('writes nothing when any row has an error', async () => {
     const broken = `${TEMPLATE}CIS-ITSM Certification,2026,,,,,Broken task,forever,,,,,,\n`;
     const { db, parsed } = await importInto(broken);
@@ -164,5 +182,39 @@ describe('importing', () => {
     expect(parsed.errors).toHaveLength(1);
     expect(await db.select().from(tasks)).toHaveLength(0);
     expect(await db.select().from(horizons)).toHaveLength(0);
+  });
+});
+
+describe('yearly goals over several years', () => {
+  const HEADER = 'year_goal,year,month_outcome,month,task,duration,due_date\n';
+  const OLD = `${HEADER}My Fitness,2026,,,,,\nMy Fitness,2027,,,,,\nMy Fitness,,Fáza 1,2026-10,Tréning A · týž. 1,45,2026-09-28\nMy Fitness,,Fáza 2,2027-01,Tréning A · týž. 15,55,2027-01-04\n`;
+
+  it('reads 2026-2027 as one goal from 1 Jan 2026 to 31 Dec 2027, holding both years', async () => {
+    const { db, parsed } = await importInto(OLD.replace('My Fitness,2026,', 'My Fitness,2026-2027,'));
+    expect(parsed.errors).toEqual([]);
+    const goals = (await db.select().from(horizons)).filter((h) => h.level === 'year');
+    expect(goals).toHaveLength(1);
+    expect(goals[0]).toMatchObject({ periodStart: '2026-01-01', periodEnd: '2027-12-31' });
+    const months = (await db.select().from(horizons)).filter((h) => h.level === 'month');
+    expect(months.every((m) => m.parentId === goals[0].id)).toBe(true);
+  });
+
+  it('joins a plan imported year by year into one goal when imported again as 2026-2027', async () => {
+    const first = await importInto(OLD);
+    expect((await first.db.select().from(horizons)).filter((h) => h.level === 'year')).toHaveLength(2);
+
+    const second = await importInto(OLD.replace('My Fitness,2026,', 'My Fitness,2026-2027,'), first);
+    expect(second.parsed.errors).toEqual([]);
+    const all = await second.db.select().from(horizons);
+    const goals = all.filter((h) => h.level === 'year');
+    expect(goals).toHaveLength(1);
+    expect(goals[0].periodEnd).toBe('2027-12-31');
+    expect(all.filter((h) => h.level === 'month').every((m) => m.parentId === goals[0].id)).toBe(true);
+    expect(await second.db.select().from(tasks)).toHaveLength(2); // matched, not duplicated
+  });
+
+  it('rejects a year it cannot read', async () => {
+    const { parsed } = await importInto(`${HEADER}My Fitness,2027-2026,,,,,\n`);
+    expect(parsed.errors[0].message).toContain('2026-2027 for a goal over several years');
   });
 });

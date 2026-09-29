@@ -22,6 +22,7 @@ export async function createTaskAction(form: FormData): Promise<void> {
     dueDate: optStr(form, 'dueDate'),
     status: enumOf(form, 'status', STATUSES, 'backlog'),
     windowId: optNum(form, 'windowId'),
+    sequential: form.get('sequential') === 'on',
   });
   refresh();
 }
@@ -36,6 +37,7 @@ export async function updateTaskAction(form: FormData): Promise<void> {
     energy: enumOf(form, 'energy', ENERGY, 'deep'),
     dueDate: optStr(form, 'dueDate'),
     windowId: optNum(form, 'windowId'),
+    sequential: form.get('sequential') === 'on',
   });
   refresh();
 }

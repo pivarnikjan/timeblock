@@ -5,14 +5,15 @@ import { listCalendars, listRangeEvents, type CalendarEvent, type CalendarSummar
 import { connectionState, isMissingScopeError, MISSING_SCOPE_HELP, type ConnectionState } from '@/lib/google/client';
 import * as blockRepo from '@/lib/repo/blocks';
 import { listMarks } from '@/lib/repo/event-marks';
-import { listVacations, vacationsBetween } from '@/lib/repo/vacations';
+import { listVacations, vacationsBetween, vacationsBySourceEvent } from '@/lib/repo/vacations';
 import { closedWindows, formInputs, vacationClosures } from '@/lib/vacation';
 import { getSettings, getCalendarFilters } from '@/lib/repo/settings';
 import { listWindows, toSpec } from '@/lib/repo/windows';
 import { nowIn } from '@/lib/time/periods';
 import { windowBands, windowLegend, type WindowBand, type WindowLegend } from './bands';
 import { blockColor, eventColor, textOn, windowColors } from './colors';
-import { eventKey, isHidden, type CalendarFilters } from './filters';
+import { eventKey, isHidden, occurrenceKey, type CalendarFilters } from './filters';
+import { isMultiDay, multiDayReviews, type MultiDayReview } from './multi-day';
 import { calendarRange, visibleHours, type CalendarRange, type CalendarView } from './views';
 
 /** One thing drawn on the calendar — a Google event or a TimeBlock block. */
@@ -54,6 +55,14 @@ export interface CalendarItem {
   important: boolean;
   /** Marked as a placeholder: planning may schedule work during it. */
   placeholder: boolean;
+  /** Events only: this occurrence's key, for turning it into a vacation. */
+  occurrence: string | null;
+  /** Events only: the vacation made from this occurrence, if any. */
+  madeVacationId: number | null;
+  /** Events only: said not to be a vacation (multi-day events are asked once). */
+  notVacation: boolean;
+  /** Events only: counts as busy in Google (not free, not declined). */
+  busy: boolean;
   /** Vacations only: the exact span, the windows it closes, and its id. */
   vacation: {
     id: number;
@@ -86,8 +95,8 @@ export interface CalendarData {
   items: CalendarItem[];
   /** The raw Google events, so the day planner can reuse this read. */
   events: CalendarEvent[];
-  /** Keys of events marked as placeholders — not busy when planning. */
-  placeholders: Set<string>;
+  /** Keys of events that are not busy when planning: placeholders, and occurrences turned into vacations. */
+  freeKeys: Set<string>;
   calendars: (CalendarSummary & { hidden: boolean })[];
   filters: CalendarFilters;
   bands: Record<string, WindowBand[]>;
@@ -100,10 +109,6 @@ export interface CalendarData {
   settings: Settings;
   /** The item open in the side panel (`?item=`), if any. */
   selected: string | null;
-}
-
-function isMultiDay(start: DateTime, end: DateTime, allDay: boolean): boolean {
-  return allDay ? end.diff(start, 'days').days > 1 : end.diff(start, 'hours').hours >= 24;
 }
 
 async function loadEvents(
@@ -138,12 +143,13 @@ export async function loadCalendarView(view: CalendarView, anchor: string, selec
   const connection = connectionState();
   const rangeStart = DateTime.fromISO(first, { zone }).toUTC().toISO()!;
   const rangeEnd = DateTime.fromISO(afterLast, { zone }).toUTC().toISO()!;
-  const [{ events, calendars, problem }, blocks, marks, away, upcoming] = await Promise.all([
+  const [{ events, calendars, problem }, blocks, marks, away, upcoming, converted] = await Promise.all([
     loadEvents(first, afterLast, zone, connection),
     blockRepo.listForRange(first, last),
     listMarks(),
     vacationsBetween(rangeStart, rangeEnd),
     listVacations(nowIn(zone).toUTC().toISO()!),
+    vacationsBySourceEvent(),
   ]);
 
   // TimeBlock's own calendar is represented by its local blocks (which also
@@ -194,6 +200,10 @@ export async function loadCalendarView(view: CalendarView, anchor: string, selec
       htmlLink: e.htmlLink,
       important,
       placeholder: mark?.placeholder ?? false,
+      occurrence: occurrenceKey(e),
+      madeVacationId: converted.get(occurrenceKey(e))?.id ?? null,
+      notVacation: mark?.notVacation ?? false,
+      busy: e.busy,
       blockState: null,
       segments: [],
       vacation: null,
@@ -234,6 +244,10 @@ export async function loadCalendarView(view: CalendarView, anchor: string, selec
       htmlLink: null,
       important: false,
       placeholder: false,
+      occurrence: null,
+      madeVacationId: null,
+      notVacation: false,
+      busy: false,
       blockState: b.state === 'cancelled' ? 'done' : b.state,
       segments: b.segments.map((s) => ({ title: s.task.title, minutes: s.minutes, done: s.doneAt !== null })),
       vacation: null,
@@ -282,7 +296,7 @@ export async function loadCalendarView(view: CalendarView, anchor: string, selec
     hours: visibleHours(settings.calendarStart, settings.calendarEnd),
     items,
     events,
-    placeholders: new Set([...marks.values()].filter((m) => m.placeholder).map((m) => m.key)),
+    freeKeys: new Set([...[...marks.values()].filter((m) => m.placeholder).map((m) => m.key), ...converted.keys()]),
     calendars: shownCalendars.map((c) => ({ ...c, hidden: filters.hiddenCalendars.includes(c.id) })),
     filters,
     bands,
@@ -322,6 +336,10 @@ const VACATION_BASE = {
   htmlLink: null,
   important: false,
   placeholder: false,
+  occurrence: null,
+  madeVacationId: null,
+  notVacation: false,
+  busy: false,
   blockState: null,
   segments: [],
 } as const satisfies Partial<CalendarItem>;
@@ -334,4 +352,26 @@ export function vacationLabel(startsAt: string, endsAt: string, zone: string, no
     ? `${end.minus({ days: 1 }).toFormat('ccc d LLL')} 24:00`
     : end.toFormat('ccc d LLL HH:mm');
   return `${start.toFormat('ccc d LLL HH:mm')} – ${endText}${note ? ` · ${note}` : ''}`;
+}
+
+/** How far ahead multi-day events are checked: as far as Plan calendar plans. */
+export const REVIEW_DAYS = 92;
+
+/**
+ * Multi-day events from today on that still need your decision (see
+ * `multiDayReviews`). Empty when Google is not connected or cannot be read —
+ * the calendar itself reports that.
+ */
+export async function loadMultiDayReviews(settings: Settings): Promise<MultiDayReview[]> {
+  if (connectionState().status !== 'connected') return [];
+  const zone = settings.timezone;
+  const now = nowIn(zone);
+  const from = now.toISODate()!;
+  const until = now.plus({ days: REVIEW_DAYS }).toISODate()!;
+  try {
+    const [events, marks, vacations] = await Promise.all([listRangeEvents(from, until, zone), listMarks(), listVacations()]);
+    return multiDayReviews(events, { marks, vacations, ownCalendarId: settings.targetCalendarId, now: now.toUTC().toISO()!, zone });
+  } catch {
+    return [];
+  }
 }

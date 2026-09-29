@@ -1,5 +1,5 @@
 import 'server-only';
-import { and, asc, eq, gt, lt } from 'drizzle-orm';
+import { and, asc, eq, gt, isNotNull, lt } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { vacations, type Vacation } from '@/lib/db/schema';
 
@@ -28,6 +28,8 @@ export interface VacationValues {
   windows: string;
   note: string | null;
   inGoogle: boolean;
+  /** Set when it was made from a Google event (`calendarId|eventId`); kept on later edits. */
+  sourceEvent?: string | null;
 }
 
 /** Creates a vacation and returns its id. */
@@ -36,7 +38,13 @@ export async function insertVacation(values: VacationValues): Promise<number> {
   return row.id;
 }
 
-export async function updateVacation(id: number, values: VacationValues): Promise<void> {
+/** Vacations made from a Google event, by that event (`calendarId|eventId`). */
+export async function vacationsBySourceEvent(): Promise<Map<string, Vacation>> {
+  const rows = await db().select().from(vacations).where(isNotNull(vacations.sourceEvent));
+  return new Map(rows.map((v) => [v.sourceEvent!, v]));
+}
+
+export async function updateVacation(id: number, values: Partial<VacationValues>): Promise<void> {
   await db().update(vacations).set(values).where(eq(vacations.id, id));
 }
 

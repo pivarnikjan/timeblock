@@ -68,6 +68,11 @@ export function eventKey(event: { calendarId: string; seriesId: string }): strin
   return `${event.calendarId}|${event.seriesId}`;
 }
 
+/** The identity of one occurrence (for a single event, the same as its `eventKey`). */
+export function occurrenceKey(event: { calendarId: string; id: string }): string {
+  return `${event.calendarId}|${event.id}`;
+}
+
 export interface VisibilityInput {
   calendarId: string | null;
   key: string | null;

@@ -111,6 +111,15 @@ export async function setEventMarkAction(form: FormData): Promise<void> {
 }
 
 /**
+ * A multi-day event's answer to "is it a vacation?": `not` = '1' says no (for
+ * every repeat), so it is not asked about again; '0' takes that back.
+ */
+export async function setNotVacationAction(form: FormData): Promise<void> {
+  await setMark(str(form, 'key'), String(form.get('title') ?? ''), 'notVacation', form.get('not') === '1');
+  revalidatePath('/', 'layout');
+}
+
+/**
  * Deletes a Google event from its calendar — for a repeating event, only this
  * occurrence — and closes the panel. TimeBlock's own calendar is managed
  * through its blocks, never from here.

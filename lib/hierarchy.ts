@@ -145,6 +145,33 @@ export function sequencePositions(
   return new Map(placed.map((p, index) => [p.id, { key: p.key, index }]));
 }
 
+/**
+ * A yearly goal may run over several years (a fitness plan from September 2026
+ * to October 2027): its period then runs from 1 January of its first year to
+ * 31 December of its last. "2026 – 2027", or just "2026".
+ */
+export function yearsLabel(h: Pick<Horizon, 'periodStart' | 'periodEnd'>): string {
+  const [from, to] = [h.periodStart.slice(0, 4), h.periodEnd.slice(0, 4)];
+  return from === to ? from : `${from} – ${to}`;
+}
+
+/**
+ * The same-titled yearly goals that fall inside `goal`'s years — the separate
+ * "2027" copy a plan imported year by year leaves behind. Extending a goal over
+ * several years takes them in: their months, weeks and tasks move under it.
+ */
+export function absorbedYearGoals(goal: Horizon, horizons: Horizon[]): Horizon[] {
+  const title = goal.title.trim().toLowerCase();
+  return horizons.filter(
+    (h) =>
+      h.id !== goal.id &&
+      h.level === 'year' &&
+      h.title.trim().toLowerCase() === title &&
+      h.periodStart >= goal.periodStart &&
+      h.periodEnd <= goal.periodEnd,
+  );
+}
+
 /** Every horizon id in the subtree rooted at `rootId`, itself included. */
 export function subtreeIds(rootId: number, horizons: Horizon[]): Set<number> {
   const ids = new Set([rootId]);

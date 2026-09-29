@@ -7,6 +7,12 @@ export interface ForecastTask extends PlannableTask {
   availableFrom: string | null;
 }
 
+/** Sequential sessions and the one day each may be planned on (see sequentialAgenda). */
+export interface SessionDays {
+  ids: ReadonlySet<number>;
+  days: ReadonlyMap<number, string>;
+}
+
 export interface RangeDay {
   date: string;
   blocks: PlannedBlock[];
@@ -41,6 +47,7 @@ export function planRange(
   tasks: ForecastTask[],
   busyByDate: Map<string, BusySpan[]> = new Map(),
   closures: Closure[] = [],
+  sessions?: SessionDays,
 ): RangePlan {
   const remaining = new Map(tasks.map((t) => [t.id, t.remainingMin]));
   const finishes = new Map<number, string>();
@@ -55,7 +62,9 @@ export function planRange(
     const eligible = tasks
       .filter((t) => (remaining.get(t.id) ?? 0) > 0)
       .filter((t) => t.availableFrom === null || t.availableFrom <= date)
-      .map((t) => ({ ...t, remainingMin: remaining.get(t.id)! }));
+      // A session is offered on its own day only, first in its window.
+      .filter((t) => !sessions?.ids.has(t.id) || sessions.days.get(t.id) === date)
+      .map((t) => ({ ...t, remainingMin: remaining.get(t.id)!, lead: sessions?.ids.has(t.id) ?? false }));
     if (eligible.length === 0) continue;
 
     const plan = planDay(date, shape, busyByDate.get(date) ?? [], windows, eligible, closures);
@@ -86,8 +95,9 @@ export function forecast(
   tasks: ForecastTask[],
   busyByDate: Map<string, BusySpan[]> = new Map(),
   closures: Closure[] = [],
+  sessions?: SessionDays,
 ): Forecast {
-  const { from: f, to, finishes, leftover } = planRange(from, days, shape, windows, tasks, busyByDate, closures);
+  const { from: f, to, finishes, leftover } = planRange(from, days, shape, windows, tasks, busyByDate, closures, sessions);
   return { from: f, to, finishes, leftover };
 }
 
