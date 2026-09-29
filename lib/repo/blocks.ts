@@ -99,6 +99,21 @@ export async function tickedMinutesByTask(): Promise<Map<number, number>> {
   return new Map(rows.map((r) => [r.taskId, Number(r.total)]));
 }
 
+/**
+ * The local date each task's work was last done on: the date of its latest
+ * block with ticked work — the day it happened, not the day it was ticked
+ * (Friday's session reviewed on Monday morning still counts for Friday).
+ */
+export async function doneOnByTask(): Promise<Map<number, string>> {
+  const rows = await db()
+    .select({ taskId: blockSegments.taskId, date: sql<string>`max(${blocks.date})` })
+    .from(blockSegments)
+    .innerJoin(blocks, eq(blockSegments.blockId, blocks.id))
+    .where(isNotNull(blockSegments.doneAt))
+    .groupBy(blockSegments.taskId);
+  return new Map(rows.map((r) => [r.taskId, r.date]));
+}
+
 export interface DraftBlock {
   startsAt: string;
   endsAt: string;
@@ -193,6 +208,20 @@ export async function moveBlock(id: number, date: string, startsAt: string, ends
     .update(blocks)
     .set({ date, startsAt, endsAt, pinned: true, updatedAt: new Date().toISOString() })
     .where(eq(blocks.id, id));
+}
+
+/**
+ * Moves a block whose work was done ahead of plan back to when it was done, as
+ * history: its unticked work is dropped from it (and planned again), and it is
+ * kept as done.
+ */
+export async function relocateDone(block: BlockWithSegments, at: { date: string; startsAt: string; endsAt: string }): Promise<void> {
+  const open = block.segments.filter((s) => s.doneAt === null).map((s) => s.id);
+  if (open.length > 0) await db().delete(blockSegments).where(inArray(blockSegments.id, open));
+  await db()
+    .update(blocks)
+    .set({ ...at, state: 'done', pinned: false, updatedAt: new Date().toISOString() })
+    .where(eq(blocks.id, block.id));
 }
 
 /** Removes a block and its task segments. */

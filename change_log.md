@@ -16,6 +16,9 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-09-29 | v0.11 | [E20 · Goals over several years](#e20--goals-over-several-years) | TB-079 – TB-080, TB-081 (fix) | Done |
+| 2026-09-29 | v0.10 | [E19 · Sequential sessions](#e19--sequential-sessions) | TB-076 – TB-078 | Done |
+| 2026-09-29 | v0.9 | [E18 · Multi-day events and finished work](#e18--multi-day-events-and-finished-work) | TB-073 – TB-075 | Done |
 | 2026-09-28 | v0.8.1 | [E14 · Readable time windows](#e14--readable-time-windows) | TB-071 – TB-072 (changes) | Done |
 | 2026-09-28 | v0.8 | [E17 · Reschedule](#e17--reschedule) | TB-068 – TB-070 | Done |
 | 2026-09-27 | v0.7.1 | [E13 · Plan the whole calendar](#e13--plan-the-whole-calendar) | TB-067 (fix) | Done |
@@ -39,6 +42,201 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-09-29 · v0.11 — Goals over several years
+
+**Theme.** A goal that runs past New Year's Eve is still one goal.
+
+**Upgrade notes.** No migration: a yearly goal's period simply ends in a later
+year. A plan imported year by year (two goals of the same name) becomes one by
+setting *Runs until* on the first, or by importing it again with `2026-2027` in
+the `year` column.
+
+## E20 · Goals over several years
+
+> Plan a year-and-a-half transformation as one goal, with one progress bar.
+
+### TB-079 · A yearly goal can run over several years
+*As a planner, I want a goal to run from 2026 into 2027, so that its progress
+and forecast cover the whole plan rather than stopping on 31 December.*
+
+Found in use: *My Fitness Transformation* was imported as two goals (2026: 86
+tasks, "runs to 31 Dec"; 2027: 258 tasks) — the plan file named the goal once
+per year.
+
+Acceptance criteria
+- [x] **Runs until** on a yearly goal's form (create and edit): the goal then
+      runs from 1 Jan of its first year to 31 Dec of its last.
+- [x] It is listed on every year it covers, marked 📅 2026 – 2027, showing that
+      year's months and how many more are on its other years.
+- [x] Running it into a year where a goal of the same name exists joins them:
+      months, weeks and tasks move under it, and the copy is deleted. Two
+      same-named goals within one year are never joined.
+
+### TB-080 · Import goals over several years
+*As a planner importing a long plan, I want `2026-2027` in the year column to
+make one goal, so that the file does not split it by year.*
+
+Acceptance criteria
+- [x] `year` accepts `2026-2027` (also with an en dash or spaces).
+- [x] Rows naming that goal with a year inside the range — a `2027` goal row,
+      tasks whose year comes from a 2027 month — land on the one goal; a stored
+      goal over several years is matched the same way.
+- [x] Importing it over a plan stored year by year extends the first goal and
+      joins the second into it; tasks are matched, never duplicated.
+
+### TB-081 · A training session is never split *(fix)*
+*As an athlete, I want each session in one block, so that the same training is
+not on the calendar twice in one morning.*
+
+Found in use: from 12 October (week 3, 55-minute trainings) the Training
+window's 90 minutes were packed as 45 + break + 30, so *Tréning A* became
+08:30–09:10 and 09:25–09:55.
+
+Acceptance criteria
+- [x] A sequential session gets one block of its own length (longer than the
+      usual maximum if need be), or waits for a slot that holds it.
+
+Where to look: `lib/hierarchy.ts` (`yearsLabel`, `absorbedYearGoals`, + tests) ·
+`lib/db/year-goals.ts` (`extendYearGoal`) · `app/actions/horizons.ts` ·
+`components/horizon-screen.tsx` (`UntilYearField`, `YearTree`) ·
+`lib/import/tasks-csv.ts` (`planImport`), `lib/import/apply.ts` (+ tests) ·
+`lib/scheduler/plan.ts` (`whole`, + tests "sessions are never split").
+
+---
+
+# 2026-09-29 · v0.10 — Sequential sessions
+
+**Theme.** A training plan is not a course: its sessions happen one a day, in
+order, a week at a time — and a week broken by a vacation starts again.
+
+**Upgrade notes.** Migration `0010_sequential_tasks` adds `tasks.sequential`
+(off for every existing task). Flag your sessions on the Tasks screen, or add a
+`sequential` column to your CSV and import it again.
+
+## E19 · Sequential sessions
+
+> Plan a training program the way it is trained: in order, one a day, week by
+> week.
+
+### TB-076 · Sequential sessions: one a day, in order
+*As an athlete following a plan, I want its sessions never doubled up on one
+day and never out of order, so that the plan I follow is the plan as written.*
+
+Found in use: Tuesday's block held *Pás do kopca + Týždenná kontrola*, and a
+missed day would stack two trainings onto the next one — the Training window
+packed sessions like course modules.
+
+Acceptance criteria
+- [x] A task can be flagged **Sequential session** (Tasks screen, CSV column
+      `sequential`; a re-import without the column leaves the flag alone).
+- [x] Sequential tasks of one yearly goal form one plan in date order, across
+      its months; at most one per day, never before the one ahead of it.
+- [x] A session goes first in its window, so the day it is given holds.
+
+### TB-077 · A week of sessions is one piece; an interrupted week starts again
+*As an athlete, I want a week of training to happen inside one week, and to
+start that week again when a vacation breaks it, so that my progression stays
+intact.*
+
+Acceptance criteria
+- [x] A week's sessions (dated in one ISO week) only start when all of them fit
+      in what is left of a week; back mid-week, the plan waits for the next week.
+- [x] A week that cannot be finished in the week it began — or whose first
+      sessions were done in an earlier week — is planned again from its first
+      session, the ones already done included; later weeks move back with it.
+- [x] Done is judged by the day the work happened (the block's date), so
+      Friday's session reviewed on Monday still counts for its week.
+- [x] Plan calendar and Reschedule report "↻ The week starting with … starts
+      again on …, N sessions already done are done again".
+
+### TB-078 · A week's other tasks move with it
+*As an athlete, I want the weekly check-in to stay with its week, so that week
+2's check-in does not happen during week 1's training.*
+
+Acceptance criteria
+- [x] Non-sequential tasks of the same goal dated in a program week are not
+      planned before that week's first session, and keep their weekday when the
+      week moves.
+
+Where to look: `lib/scheduler/sequential.ts` (`sequentialAgenda`, + tests in
+`scheduler.test.ts`, "sequential sessions") · `lib/planner.ts` (`sessionPlan`,
+`anchored`) · `lib/scheduler/forecast.ts` (`SessionDays`) ·
+`lib/scheduler/plan.ts` (`lead`) · `lib/repo/blocks.ts` (`doneOnByTask`) ·
+`app/tasks/page.tsx` · `lib/import/tasks-csv.ts` (+ tests).
+
+---
+
+# 2026-09-29 · v0.9 — Multi-day events and finished work
+
+**Theme.** Keep the plan honest when the calendar and the work move on: a
+multi-day event made in Google is asked about (is it a vacation?), and work
+finished ahead of plan is no longer planned.
+
+**Upgrade notes.** Migration `0009_multi_day_classification` adds
+`vacations.source_event` and `event_marks.not_vacation`. Nothing is decided for
+you: after upgrading, the Calendar lists the multi-day events of the next three
+months that need an answer.
+
+## E18 · Multi-day events and finished work
+
+> Know what a multi-day event means for planning, and stop planning work that
+> is already done.
+
+### TB-073 · Reschedule leaves out work finished ahead of plan
+*As a learner who works ahead, I want work I already finished left out of a
+reschedule, so that its old slots go to what comes next.*
+
+Acceptance criteria
+- [x] Blocks still to come whose tasks are all finished (marked done or ticked
+      off in full) come off the calendar — Google event too — even when placed
+      by hand; the preview lists those tasks under *Already finished*, apart
+      from the impacted ones.
+- [x] A block ticked off before it began moves back to when it was ticked
+      (same length, ending then), kept as history; its Google event moves too,
+      its unticked part is planned again, and its slot opens up.
+- [x] "Nothing to reschedule" only when no block is replaced, added or moved back.
+
+Where to look: `lib/planner.ts` (`proposeReschedule`, `reschedule`) ·
+`lib/scheduler/reschedule.ts` (`doneAheadAt`, `whenDone`, + tests) ·
+`lib/repo/blocks.ts` (`relocateDone`) · `components/plan-calendar-bar.tsx`.
+
+### TB-074 · Make a multi-day event a vacation
+*As a planner, I want to turn a multi-day event from Google into a vacation, so
+that it closes the windows I choose instead of all of them or none.*
+
+Acceptance criteria
+- [x] A multi-day event's panel offers **Make it a vacation…**: the vacation form
+      filled in from the event (dates, all windows, title as note).
+- [x] Once saved, that occurrence no longer counts as busy; the vacation closes
+      the chosen windows. For a repeating event it is one occurrence.
+- [x] The panel then says it was made into a vacation, with a link to it.
+
+Where to look: `components/calendar/event-panel.tsx` (`VacationQuestion`) ·
+`app/actions/vacation.ts` (`saveVacationAction`) · `lib/calendar/busy.ts` ·
+`lib/repo/event-marks.ts` (`freeEventKeys`).
+
+### TB-075 · Multi-day events waiting for a decision
+*As a planner who adds trips straight in Google, I want to be told which
+multi-day events TimeBlock has not classified, so that I decide before work is
+planned into them.*
+
+Acceptance criteria
+- [x] Above the calendar: the multi-day events of the next three months with no
+      answer yet — busy or free, timed or all-day — each with **Vacation…**,
+      **Not a vacation** and **Open event**. A repeating event is listed once.
+- [x] *Not a vacation* (for every repeat) and *Placeholder* count as answers;
+      *Ask again* in the panel takes it back. Declined events, TimeBlock's own,
+      and events a vacation already covers are never listed.
+- [x] A vacation made from an event that later moved in Google is listed too,
+      with **Move the vacation with it**.
+
+Where to look: `lib/calendar/multi-day.ts` (`multiDayReviews`, + tests) ·
+`components/calendar/multi-day-review.tsx` · `lib/calendar/load.ts`
+(`loadMultiDayReviews`) · `app/actions/calendar.ts` (`setNotVacationAction`) ·
+`app/actions/vacation.ts` (`matchEventAction`).
 
 ---
 

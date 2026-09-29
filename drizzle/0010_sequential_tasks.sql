@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `sequential` integer DEFAULT false NOT NULL;

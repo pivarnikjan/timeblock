@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { eq } from 'drizzle-orm';
 import type { Db } from '@/lib/db/client';
 import { horizons, tasks } from '@/lib/db/schema';
+import { extendYearGoal } from '@/lib/db/year-goals';
 import type { ImportPlan } from './tasks-csv';
 
 /**
@@ -31,15 +32,17 @@ export async function applyImport(database: Db, sqlite: DatabaseSync, plan: Impo
           break;
         }
         case 'update-horizon': {
-          const patch: { parentId?: number | null; windowId?: number } = {};
+          const patch: { parentId?: number | null; windowId?: number; periodEnd?: string } = {};
           if (op.parentKey !== null) patch.parentId = idOf(op.parentKey);
           if (op.windowId !== null) patch.windowId = op.windowId;
+          if (op.periodEnd) patch.periodEnd = op.periodEnd;
           if (Object.keys(patch).length > 0) await database.update(horizons).set(patch).where(eq(horizons.id, op.id));
           break;
         }
         case 'create-task':
           await database.insert(tasks).values({
             ...op.task,
+            sequential: op.task.sequential ?? false,
             horizonId: idOf(op.horizonKey),
             windowId: op.windowId,
             sortOrder: op.sortOrder,
@@ -57,9 +60,16 @@ export async function applyImport(database: Db, sqlite: DatabaseSync, plan: Impo
               notes: op.task.notes,
               windowId: op.windowId,
               sortOrder: op.sortOrder,
+              ...(op.task.sequential === null ? {} : { sequential: op.task.sequential }),
             })
             .where(eq(tasks.id, op.id));
           break;
+      }
+    }
+    // A goal the file runs over several years takes in its same-titled copies for those years.
+    for (const op of plan.ops) {
+      if ((op.kind === 'create-horizon' || op.kind === 'update-horizon') && op.key.startsWith('year|')) {
+        await extendYearGoal(database, idOf(op.key)!);
       }
     }
     sqlite.exec('COMMIT');

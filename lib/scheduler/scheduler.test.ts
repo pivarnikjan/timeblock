@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { dayWindow, freeSlots, windowInterval, type BusySpan, type DayShape, type WindowSpec } from './day';
 import { dueAfter, forecast, planRange } from './forecast';
 import { blockCap, planDay, rankTasks, type PlannableTask, type PlannedBlock } from './plan';
-import { conflictOf, diffBlocks } from './reschedule';
+import { conflictOf, diffBlocks, doneAheadAt, whenDone } from './reschedule';
+import { isoWeek, sequentialAgenda, type ChainTask } from './sequential';
 
 const TZ = 'Europe/Vienna';
 
@@ -551,5 +552,131 @@ describe('reschedule', () => {
     expect(at(diff.kept)).toEqual(['10:30', '12:30']); // identical before and after: untouched
     expect(at(diff.removed)).toEqual(['11:30', '13:30']); // under the meeting, and the block its minutes cascade into
     expect([...diff.impacted]).toEqual([2]);
+  });
+});
+
+describe('work done ahead of plan', () => {
+  const block = (doneAt: (string | null)[]) => ({
+    startsAt: local(TUESDAY, '10:30'),
+    endsAt: local(TUESDAY, '11:15'),
+    segments: doneAt.map((d) => ({ doneAt: d })),
+  });
+  const MONDAY_EVENING = local(MONDAY, '20:07');
+
+  it('recognises a block ticked off before it began', () => {
+    expect(doneAheadAt(block([MONDAY_EVENING]), local(MONDAY, '21:00'))).toBe(MONDAY_EVENING);
+    expect(doneAheadAt(block([MONDAY_EVENING, null]), local(MONDAY, '21:00'))).not.toBeNull(); // part done ahead
+  });
+
+  it('leaves blocks alone that were not ticked, were ticked during them, or have begun', () => {
+    expect(doneAheadAt(block([null]), local(MONDAY, '21:00'))).toBeNull();
+    expect(doneAheadAt(block([local(TUESDAY, '11:20')]), local(TUESDAY, '12:00'))).toBeNull(); // begun already
+    expect(doneAheadAt(block([local(TUESDAY, '10:40')]), local(MONDAY, '21:00'))).toBeNull(); // ticked after it began
+  });
+
+  it('puts it back as history, ending when it was ticked off', () => {
+    const at = whenDone(block([MONDAY_EVENING]), MONDAY_EVENING, TZ);
+
+    expect(at.date).toBe(MONDAY);
+    expect([hhmm(DateTime.fromISO(at.startsAt)), hhmm(DateTime.fromISO(at.endsAt))]).toEqual(['19:25', '20:10']);
+  });
+});
+
+describe('sequential sessions (a training plan)', () => {
+  // Week 1: 28 Sep – 4 Oct (Mon–Sun); week 2 starts 5 Oct. Training on weekdays.
+  const W1 = ['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02'];
+  const W2 = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09'];
+  const W3 = ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16'];
+  const week =(dates: string[], firstId: number, over: Partial<ChainTask> = {}): ChainTask[] =>
+    dates.map((d, i) => ({
+      id: firstId + i,
+      chain: 'fitness',
+      week: isoWeek(d),
+      estimateMin: 45,
+      remainingMin: 45,
+      doneOn: null,
+      availableFrom: d,
+      heldOn: null,
+      ...over,
+    }));
+  const weekday = (d: string) => [1, 2, 3, 4, 5].includes(DateTime.fromISO(d).weekday);
+  const open = (closed: string[] = []) => (d: string) => weekday(d) && !closed.includes(d);
+  const days = (agenda: ReturnType<typeof sequentialAgenda>, ids: number[]) => ids.map((id) => agenda.days.get(id) ?? null);
+
+  it('plans one session a day, in order, on its own date', () => {
+    const agenda = sequentialAgenda(week(W1, 1), W1[0], 30, open());
+    expect(days(agenda, [1, 2, 3, 4, 5])).toEqual(W1);
+    expect(agenda.redo.size).toBe(0);
+  });
+
+  it('does not start a week a vacation would interrupt: it waits for the next week, and the plan moves back', () => {
+    const agenda = sequentialAgenda([...week(W1, 1), ...week(W2, 11)], W1[0], 30, open([W1[2]])); // off on Wednesday
+    expect(days(agenda, [1, 2, 3, 4, 5])).toEqual(W2);
+    expect(days(agenda, [11, 12, 13, 14, 15])).toEqual(W3);
+  });
+
+  it('carries on with the week under way when the rest of it still fits', () => {
+    const tasks = week(W1, 1).map((t, i) => (i < 2 ? { ...t, remainingMin: 0, doneOn: W1[i] } : t));
+    const agenda = sequentialAgenda(tasks, W1[2], 30, open());
+    expect(days(agenda, [3, 4, 5])).toEqual(W1.slice(2));
+    expect(agenda.redo.size).toBe(0);
+  });
+
+  it('starts an interrupted week again from its first session, the ones already done included', () => {
+    const tasks = [...week(W1, 1).map((t, i) => (i < 2 ? { ...t, remainingMin: 0, doneOn: W1[i] } : t)), ...week(W2, 11)];
+    const agenda = sequentialAgenda(tasks, W1[2], 30, open([W1[2], W1[3], W1[4]])); // away Wed–Fri
+
+    expect([...agenda.redo].sort()).toEqual([1, 2]);
+    expect(days(agenda, [1, 2, 3, 4, 5])).toEqual(W2);
+    expect(days(agenda, [11, 12, 13, 14, 15])).toEqual(W3);
+    expect(agenda.restarts).toEqual([{ chain: 'fitness', week: isoWeek(W1[0]), taskIds: [1, 2, 3, 4, 5], redone: [1, 2], on: W2[0] }]);
+  });
+
+  it('starts a week again when its first sessions were done in an earlier week', () => {
+    const tasks = week(W1, 1).map((t, i) => (i < 2 ? { ...t, remainingMin: 0, doneOn: W1[i] } : t));
+    const agenda = sequentialAgenda(tasks, W2[0], 30, open());
+    expect([...agenda.redo].sort()).toEqual([1, 2]);
+    expect(days(agenda, [1, 2, 3, 4, 5])).toEqual(W2);
+  });
+
+  it('back in the middle of a week, the next week waits for Monday', () => {
+    const agenda = sequentialAgenda(week(W2, 11), W2[2], 30, open()); // Wednesday, nothing done
+    expect(days(agenda, [11, 12, 13, 14, 15])).toEqual(W3);
+  });
+
+  it('keeps a lone session (no week) one a day, after the one before', () => {
+    const lone = (id: number): ChainTask => ({ id, chain: 'c', week: null, estimateMin: 30, remainingMin: 30, doneOn: null, availableFrom: null, heldOn: null });
+    const agenda = sequentialAgenda([lone(1), lone(2), lone(3)], W1[0], 30, open([W1[1]]));
+    expect(days(agenda, [1, 2, 3])).toEqual([W1[0], W1[2], W1[3]]);
+  });
+
+  it('never plans two sessions on one day, even when both would fit', () => {
+    const tasks = [task({ id: 1, title: 'A', remainingMin: 45, windowId: LEARNING.id }), task({ id: 2, title: 'pás', remainingMin: 25, windowId: LEARNING.id })];
+    const range = planRange(MONDAY, 7, SHAPE, WINDOWS, tasks.map((t) => ({ ...t, availableFrom: null })), new Map(), [], {
+      ids: new Set([1, 2]),
+      days: new Map([[1, MONDAY], [2, TUESDAY]]),
+    });
+    expect(range.days.map((d) => [d.date, d.blocks.flatMap((b) => b.segments.map((s) => s.taskId))])).toEqual([
+      [MONDAY, [1]],
+      [TUESDAY, [2]],
+    ]);
+  });
+});
+
+describe('sessions are never split', () => {
+  const TRAINING: WindowSpec = { id: 3, name: 'Training', start: '08:30', end: '10:00', weekdays: [1, 2, 3, 4, 5] };
+
+  it('gives a 55-minute training one block, not 40 + 15 on the same morning', () => {
+    const split = planDay(MONDAY, SHAPE, [], [TRAINING], [task({ id: 1, title: 'Tréning A', remainingMin: 55, windowId: 3 })]);
+    const whole = planDay(MONDAY, SHAPE, [], [TRAINING], [task({ id: 1, title: 'Tréning A', remainingMin: 55, windowId: 3, whole: true })]);
+    const titles = new Map([[1, 'A']]);
+
+    expect(layout(split.blocks, titles)).toEqual(['08:30–09:10 A 40', '09:25–09:55 A 15']); // what happened from 12 Oct
+    expect(layout(whole.blocks, titles)).toEqual(['08:30–09:25 A 55']);
+  });
+
+  it('waits for a slot that holds the whole session', () => {
+    const plan = planDay(MONDAY, SHAPE, [meeting(MONDAY, '09:15', '09:30')], [TRAINING], [task({ id: 1, remainingMin: 55, windowId: 3, whole: true })]);
+    expect(plan.blocks).toEqual([]);
   });
 });

@@ -18,6 +18,8 @@ import {
 } from './colors';
 import { eventKey, isHidden, parseFilters } from './filters';
 import { layoutColumns, layoutLanes } from './layout';
+import { multiDayReviews, spanLabel } from './multi-day';
+import type { CalendarEvent } from '@/lib/google/calendar';
 import { calendarHref, calendarRange, parseView, visibleHours } from './views';
 
 const TZ = 'Europe/Vienna';
@@ -329,5 +331,80 @@ describe('block colours in Google', () => {
     // Changed in Google by hand.
     expect(colorUpdate({ colorId: '11', plannedColorId: '2' }, '6')).toBe('chosen-by-hand');
     expect(colorUpdate({ colorId: '3', plannedColorId: null }, '2')).toBe('chosen-by-hand');
+  });
+});
+
+describe('multi-day events: is it a vacation?', () => {
+  const ZONE = 'Europe/Vienna';
+  const NOW = '2026-09-29T06:00:00.000Z';
+  const ev = (over: Partial<CalendarEvent>): CalendarEvent => ({
+    id: 'e1',
+    calendarId: 'primary',
+    seriesId: 'e1',
+    title: 'Crete',
+    start: '2026-10-09T08:00:00.000Z',
+    end: '2026-10-11T09:00:00.000Z',
+    allDay: false,
+    busy: true,
+    declined: false,
+    colorId: null,
+    plannedColorId: null,
+    blockId: null,
+    vacationId: null,
+    recurring: false,
+    htmlLink: null,
+    ...over,
+  });
+  const reviews = (events: CalendarEvent[], opts: Partial<Parameters<typeof multiDayReviews>[1]> = {}) =>
+    multiDayReviews(events, { marks: new Map(), vacations: [], ownCalendarId: 'tb', now: NOW, zone: ZONE, ...opts });
+
+  it('asks about busy and free multi-day events, not about a single day', () => {
+    const allDayFree = ev({ id: 'e2', seriesId: 'e2', allDay: true, busy: false, start: '2026-10-11T22:00:00.000Z', end: '2026-10-16T22:00:00.000Z' });
+    const oneDay = ev({ id: 'e3', seriesId: 'e3', allDay: true, start: '2026-10-19T22:00:00.000Z', end: '2026-10-20T22:00:00.000Z' });
+    const evening = ev({ id: 'e4', seriesId: 'e4', start: '2026-10-09T16:00:00.000Z', end: '2026-10-09T19:00:00.000Z' });
+
+    expect(reviews([ev({}), allDayFree, oneDay, evening]).map((r) => r.eventId)).toEqual(['e1', 'e2']);
+  });
+
+  it('asks once per repeating event, and counts the repeats', () => {
+    const repeat = (id: string, start: string, end: string) => ev({ id, seriesId: 'weekend', recurring: true, start, end });
+    const out = reviews([repeat('w1', '2026-10-09T08:00:00.000Z', '2026-10-11T09:00:00.000Z'), repeat('w2', '2026-10-16T08:00:00.000Z', '2026-10-18T09:00:00.000Z')]);
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ eventId: 'w1', key: 'primary|weekend', repeats: 2 });
+  });
+
+  it('stops asking once decided: not a vacation, a placeholder, or made into one', () => {
+    expect(reviews([ev({})], { marks: new Map([['primary|e1', { placeholder: false, notVacation: true }]]) })).toEqual([]);
+    expect(reviews([ev({})], { marks: new Map([['primary|e1', { placeholder: true, notVacation: false }]]) })).toEqual([]);
+    const made = { id: 5, startsAt: '2026-10-09T08:00:00.000Z', endsAt: '2026-10-11T09:00:00.000Z', sourceEvent: 'primary|e1' };
+    expect(reviews([ev({})], { vacations: [made] })).toEqual([]);
+  });
+
+  it('does not ask about events a vacation already covers, TimeBlock events, declined or finished ones', () => {
+    const covering = { id: 6, startsAt: '2026-10-09T00:00:00.000Z', endsAt: '2026-10-12T00:00:00.000Z', sourceEvent: null };
+    expect(reviews([ev({})], { vacations: [covering] })).toEqual([]);
+    expect(reviews([ev({ calendarId: 'tb' }), ev({ id: 'x', blockId: 3 }), ev({ id: 'y', declined: true })])).toEqual([]);
+    expect(reviews([ev({ start: '2026-09-20T08:00:00.000Z', end: '2026-09-28T08:00:00.000Z' })])).toEqual([]);
+  });
+
+  it('notices when an event made into a vacation moves in Google', () => {
+    const made = { id: 5, startsAt: '2026-10-09T08:00:00.000Z', endsAt: '2026-10-11T09:00:00.000Z', sourceEvent: 'primary|e1' };
+    const moved = reviews([ev({ start: '2026-10-10T08:00:00.000Z', end: '2026-10-12T09:00:00.000Z' })], { vacations: [made] });
+
+    expect(moved).toHaveLength(1);
+    expect(moved[0]).toMatchObject({ kind: 'moved', vacation: { id: 5 } });
+  });
+
+  it('frees an occurrence made into a vacation, but not the other repeats', () => {
+    const a = { ...ev({ id: 'w1', seriesId: 'weekend' }) };
+    const b = { ...ev({ id: 'w2', seriesId: 'weekend', start: '2026-10-16T08:00:00.000Z', end: '2026-10-18T09:00:00.000Z' }) };
+
+    expect(busySpans([a, b], new Set(['primary|w1']))).toEqual([{ start: b.start, end: b.end }]);
+  });
+
+  it('labels spans the way the calendar reads them', () => {
+    expect(spanLabel('2026-10-11T22:00:00.000Z', '2026-10-16T22:00:00.000Z', true, ZONE)).toBe('Mon 12 Oct – Fri 16 Oct');
+    expect(spanLabel('2026-10-09T08:00:00.000Z', '2026-10-11T09:00:00.000Z', false, ZONE)).toBe('Fri 9 Oct 10:00 – Sun 11 Oct 11:00');
   });
 });

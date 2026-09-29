@@ -76,6 +76,12 @@ export const tasks = sqliteTable(
     windowId: integer('window_id'),
     /** Sequence within a priority; imports and new tasks append, so course order holds. */
     sortOrder: integer('sort_order').notNull().default(0),
+    /**
+     * One of an ordered run of sessions (a training plan): never two on one day,
+     * never before the one before it is done, and a week's sessions all inside
+     * one week — see lib/scheduler/sequential.ts.
+     */
+    sequential: integer('sequential', { mode: 'boolean' }).notNull().default(false),
     createdAt: text('created_at').notNull().default(now),
     completedAt: text('completed_at'),
   },
@@ -175,6 +181,11 @@ export const vacations = sqliteTable(
     inGoogle: integer('in_google', { mode: 'boolean' }).notNull().default(false),
     /** The Google event mirroring it, once created. */
     googleEventId: text('google_event_id'),
+    /**
+     * The Google event it was made from (`calendarId|eventId`, one occurrence):
+     * that event then no longer counts as busy — the vacation says what closes.
+     */
+    sourceEvent: text('source_event'),
     createdAt: text('created_at').notNull().default(now),
   },
   (t) => [index('vacations_range_idx').on(t.startsAt, t.endsAt)],
@@ -193,6 +204,8 @@ export const eventMarks = sqliteTable('event_marks', {
   important: integer('important', { mode: 'boolean' }).notNull().default(false),
   /** Not busy for planning: work may be scheduled during it. */
   placeholder: integer('placeholder', { mode: 'boolean' }).notNull().default(false),
+  /** A multi-day event you said is not a vacation, so it is not asked about again. */
+  notVacation: integer('not_vacation', { mode: 'boolean' }).notNull().default(false),
   updatedAt: text('updated_at').notNull().default(now),
 });
 

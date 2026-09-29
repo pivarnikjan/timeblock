@@ -110,9 +110,42 @@ function taskList(tasks: RescheduleSummary['impacted'], shown = 6): string {
   return tasks.length > shown ? `${head} and ${tasks.length - shown} more` : head;
 }
 
-function RescheduleNotes({ summary: s }: { summary: RescheduleSummary }) {
+/** Nothing for a reschedule to do (mirrors `rescheduleIsEmpty` in the planner). */
+const isEmpty = (s: RescheduleSummary) => s.removed === 0 && s.added === 0 && s.doneAhead === 0;
+
+/** Weeks of sequential sessions that start again — a vacation or a missed day broke them. */
+function Restarts({ restarts }: { restarts: RescheduleSummary['restarts'] }) {
+  if (restarts.length === 0) return null;
   return (
     <>
+      {restarts.map((r, i) => (
+        <p key={i} className="text-xs text-amber-600">
+          ↻ The week starting with “{r.first}” cannot be finished within one week, so it starts again from its first session
+          {r.on ? ` on ${day(r.on)}` : ', but does not fit in the next three months'}
+          {r.redone > 0 && ` — ${plural(r.redone, 'session')} already done ${r.redone === 1 ? 'is' : 'are'} done again`}; the weeks after
+          it move back.
+        </p>
+      ))}
+    </>
+  );
+}
+
+function RescheduleNotes({ summary: s, done = false }: { summary: RescheduleSummary; done?: boolean }) {
+  return (
+    <>
+      <Restarts restarts={s.restarts} />
+      {s.finished.length > 0 && (
+        <p className="text-xs text-muted">
+          ✓ Already finished, so no longer planned: {taskList(s.finished)} — {done ? 'their blocks were taken off' : 'their blocks come off'} the
+          calendar.
+        </p>
+      )}
+      {s.doneAhead > 0 && (
+        <p className="text-xs text-muted">
+          ✓ {plural(s.doneAhead, 'block')} you ticked off ahead of time {done ? (s.doneAhead === 1 ? 'was moved' : 'were moved') : s.doneAhead === 1 ? 'moves' : 'move'} back
+          to when you did {s.doneAhead === 1 ? 'it' : 'them'}, freeing {s.doneAhead === 1 ? 'its slot' : 'their slots'} for what comes next.
+        </p>
+      )}
       {s.unfinished.length > 0 && (
         <p className="text-xs text-amber-600">
           Does not fit in the next three months: {s.unfinished.map((u) => `${u.title} (${formatMinutes(u.minutes)})`).join(', ')}.
@@ -123,9 +156,24 @@ function RescheduleNotes({ summary: s }: { summary: RescheduleSummary }) {
   );
 }
 
+/** "3 blocks are replaced by 4", "2 new blocks", "2 blocks come off" — whichever applies. */
+function blockChanges(s: RescheduleSummary, done = false): string {
+  if (s.removed > 0 && s.added > 0) {
+    return `${plural(s.removed, 'block')} ${done ? '' : s.removed === 1 ? 'is ' : 'are '}replaced by ${s.added}`;
+  }
+  if (s.added > 0) return `${plural(s.added, 'new block')}`;
+  return `${plural(s.removed, 'block')} ${done ? 'taken off' : s.removed === 1 ? 'comes off' : 'come off'}`;
+}
+
+/** What the confirm button does, in a few words. */
+function confirmLabel(s: RescheduleSummary): string {
+  if (s.impacted.length > 0) return `Reschedule ${plural(s.impacted.length, 'task')}`;
+  return 'Update the calendar';
+}
+
 /** Step one of "Reschedule": what would move, and a button to go ahead. */
 function ReschedulePreview({ summary: s, pending }: { summary: RescheduleSummary; pending: boolean }) {
-  if (s.impacted.length === 0) {
+  if (isEmpty(s)) {
     return (
       <div className="space-y-1.5 text-sm">
         <p>Nothing to reschedule — every planned block still fits where it is.</p>
@@ -138,22 +186,30 @@ function ReschedulePreview({ summary: s, pending }: { summary: RescheduleSummary
   }
   return (
     <div className="space-y-2 rounded-md border border-accent/40 bg-accent/5 px-3 py-2.5 text-sm">
-      <p>
-        <strong>{plural(s.impacted.length, 'task')} impacted</strong>
-        {s.firstChange && <> from {day(s.firstChange)}</>}: {taskList(s.impacted)}.
-      </p>
-      <p className="text-xs text-muted">
-        {plural(s.removed, 'block')} {s.removed === 1 ? 'is' : 'are'} replaced by {s.added}
-        {s.kept > 0 && `; ${plural(s.kept, 'block')} stay${s.kept === 1 ? 's' : ''} exactly where ${s.kept === 1 ? 'it is' : 'they are'}`}.
-        {s.conflicts > 0 && ` ${plural(s.conflicts, 'block')} collide${s.conflicts === 1 ? 's' : ''} with a meeting or vacation.`}
-        {s.released > 0 &&
-          ` ${plural(s.released, 'block')} you placed by hand ${s.released === 1 ? 'has' : 'have'} a meeting on ${s.released === 1 ? 'it' : 'them'} and will be moved too.`}
-        {s.toGoogle ? ' Google Calendar is updated too.' : ' The new blocks are drafts — commit them when you are happy.'}
-      </p>
+      {s.impacted.length > 0 ? (
+        <p>
+          <strong>{plural(s.impacted.length, 'task')} impacted</strong>
+          {s.firstChange && <> from {day(s.firstChange)}</>}: {taskList(s.impacted)}.
+        </p>
+      ) : (
+        <p>
+          <strong>No task has to move</strong> — only work you already finished changes.
+        </p>
+      )}
+      {(s.removed > 0 || s.added > 0) && (
+        <p className="text-xs text-muted">
+          {blockChanges(s)}
+          {s.kept > 0 && `; ${plural(s.kept, 'block')} stay${s.kept === 1 ? 's' : ''} exactly where ${s.kept === 1 ? 'it is' : 'they are'}`}.
+          {s.conflicts > 0 && ` ${plural(s.conflicts, 'block')} collide${s.conflicts === 1 ? 's' : ''} with a meeting or vacation.`}
+          {s.released > 0 &&
+            ` ${plural(s.released, 'block')} you placed by hand ${s.released === 1 ? 'has' : 'have'} a meeting on ${s.released === 1 ? 'it' : 'them'} and will be moved too.`}
+          {s.toGoogle ? ' Google Calendar is updated too.' : ' The new blocks are drafts — commit them when you are happy.'}
+        </p>
+      )}
       <RescheduleNotes summary={s} />
       <div className="flex flex-wrap gap-2">
         <Button tone="primary" type="submit" name="intent" value="reschedule" disabled={pending}>
-          {pending ? 'Rescheduling…' : `Reschedule ${plural(s.impacted.length, 'task')}`}
+          {pending ? 'Rescheduling…' : confirmLabel(s)}
         </Button>
         <Button tone="ghost" type="submit" name="intent" value="cancel" disabled={pending}>
           Cancel
@@ -164,20 +220,21 @@ function ReschedulePreview({ summary: s, pending }: { summary: RescheduleSummary
 }
 
 function RescheduleDone({ result: r }: { result: Extract<PlanCalendarState, { kind: 'rescheduled' }>['result'] }) {
-  if (r.impacted.length === 0) return <p className="text-sm text-muted">Nothing to reschedule — every planned block still fits.</p>;
+  if (isEmpty(r)) return <p className="text-sm text-muted">Nothing to reschedule — every planned block still fits.</p>;
   return (
     <div className="space-y-1.5 text-sm">
       <p className="text-emerald-600">
-        Rescheduled {plural(r.impacted.length, 'task')}: {plural(r.removed, 'block')} replaced by {r.added}
+        {r.impacted.length > 0 ? `Rescheduled ${plural(r.impacted.length, 'task')}` : 'Calendar updated'}
+        {(r.removed > 0 || r.added > 0) && `: ${blockChanges(r, true)}`}
         {r.kept > 0 && `, ${r.kept} left as they were`}
-        {r.toGoogle && ` · ${plural(r.created, 'event')} created in Google Calendar`}.{' '}
+        {r.toGoogle && r.created > 0 && ` · ${plural(r.created, 'event')} created in Google Calendar`}.{' '}
         {r.firstChange && (
           <Link href={`/calendar?view=workweek&date=${r.firstChange}`} className="text-accent underline underline-offset-2">
             Review from {day(r.firstChange)} →
           </Link>
         )}
       </p>
-      <RescheduleNotes summary={r} />
+      <RescheduleNotes summary={r} done />
     </div>
   );
 }
@@ -197,6 +254,7 @@ function PlanSummary({ summary: s }: { summary: Extract<PlanCalendarState, { kin
         <p>Nothing to plan — no open task is in a week yet or marked active.</p>
       )}
       {s.pinned > 0 && <p className="text-xs text-muted">Worked around {plural(s.pinned, 'block')} you placed by hand.</p>}
+      <Restarts restarts={s.restarts} />
       {s.unfinished.length > 0 && (
         <p className="text-xs text-amber-600">
           Did not fit in the next three months: {s.unfinished.map((u) => `${u.title} (${formatMinutes(u.minutes)})`).join(', ')}.

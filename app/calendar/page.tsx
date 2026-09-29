@@ -6,7 +6,8 @@ import { MonthGrid } from '@/components/calendar/month-grid';
 import { PlanCalendarBar } from '@/components/plan-calendar-bar';
 import { TimeGrid } from '@/components/calendar/time-grid';
 import { PlanningPanel } from '@/components/planning-panel';
-import { loadCalendarView } from '@/lib/calendar/load';
+import { loadCalendarView, loadMultiDayReviews } from '@/lib/calendar/load';
+import { MultiDayReviewList } from '@/components/calendar/multi-day-review';
 import { vacationConflicts } from '@/lib/calendar/vacation-conflicts';
 import { parseView } from '@/lib/calendar/views';
 import { busySpans } from '@/lib/google/calendar';
@@ -28,9 +29,10 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
   const anchor = asked && DateTime.fromISO(asked, { zone }).isValid ? asked : nowIn(zone).toISODate()!;
 
   const askedItem = typeof params.item === 'string' ? params.item : null;
-  const [data, draftDates] = await Promise.all([
+  const [data, draftDates, reviews] = await Promise.all([
     loadCalendarView(view, anchor, askedItem),
     blockRepo.draftDatesFrom(nowIn(zone).toISODate()!),
+    loadMultiDayReviews(settings),
   ]);
   // The clicked item, if it is still there (a deleted or hidden one simply closes the panel).
   const selected = data.items.find((i) => i.id === askedItem) ?? null;
@@ -47,13 +49,14 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
   // The one-day view is where a day is planned: reuse the events just read.
   const day =
     view === 'day'
-      ? await loadDay(anchor, { events: data.events, busy: busySpans(data.events, data.placeholders), problem: data.problem })
+      ? await loadDay(anchor, { events: data.events, busy: busySpans(data.events, data.freeKeys), problem: data.problem })
       : null;
 
   return (
     <div className="space-y-5">
       <CalendarHeader data={data} />
       <PlanCalendarBar drafts={drafts} googleConnected={data.connection.status === 'connected'} />
+      <MultiDayReviewList data={data} reviews={reviews} />
 
       {(data.connection.status === 'not-configured' || data.connection.status === 'not-connected') && (
         <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm">

@@ -37,6 +37,10 @@ export interface PlannableTask {
   sequenceKey?: string | null;
   /** Position inside the sequence; lower comes first. Only compared within one key. */
   sequenceIndex?: number;
+  /** A sequential session on its day: it goes first in its window, so the day it was given holds. */
+  lead?: boolean;
+  /** Never split across blocks (a training session): it gets a block of its own length, or waits for a slot that holds it. */
+  whole?: boolean;
 }
 
 export interface PlannedSegment {
@@ -84,6 +88,7 @@ export function rankTasks<T extends PlannableTask>(tasks: T[], date: string): T[
 
   const ranked = [...tasks].sort(
     (a, b) =>
+      Number(b.lead ?? false) - Number(a.lead ?? false) ||
       overdue(a) - overdue(b) ||
       a.priority - b.priority ||
       dueRank(a).localeCompare(dueRank(b)) ||
@@ -162,6 +167,8 @@ export function gateSequences<T extends PlannableTask>(ranked: T[]): { ready: T[
 interface QueueItem {
   taskId: number;
   remaining: number;
+  /** See `PlannableTask.whole`. */
+  whole?: boolean;
 }
 
 /** Rounds a block up to the next 5 minutes so calendar times stay readable. */
@@ -220,6 +227,15 @@ export function packWindow(
           content += item.remaining;
           queue.shift();
           continue;
+        }
+        if (item.whole) {
+          // A session is never cut: alone in a block as long as it needs, if the slot holds it.
+          if (content === 0 && item.remaining <= left) {
+            segments.push({ taskId: item.taskId, minutes: item.remaining });
+            content = item.remaining;
+            queue.shift();
+          }
+          break;
         }
         // Fill the rest of the block with the start of the next task rather than
         // leave it idle — the goal finishes sooner. Never cut a piece under
@@ -315,7 +331,7 @@ export function planDay(
     const slots = openSlots(freeSlots(date, shape, busyNow, window), closed, shape);
     freeMinutes += slots.reduce((sum, s) => sum + minutes(s), 0);
 
-    const queue: QueueItem[] = mine.map((t) => ({ taskId: t.id, remaining: t.remainingMin }));
+    const queue: QueueItem[] = mine.map((t) => ({ taskId: t.id, remaining: t.remainingMin, whole: t.whole }));
     const placed = packWindow(slots, queue, shape, spec.id);
     blocks.push(...placed);
     busyNow.push(...placed.map((b) => ({ start: b.start.toUTC().toISO()!, end: b.end.toUTC().toISO()! })));

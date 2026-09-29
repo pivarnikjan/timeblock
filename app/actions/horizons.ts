@@ -1,6 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { db } from '@/lib/db/client';
+import { extendYearGoal } from '@/lib/db/year-goals';
 import * as repo from '@/lib/repo/horizons';
 import { createTask, updateTask } from '@/lib/repo/tasks';
 import { parseDuration } from '@/lib/csv/duration';
@@ -22,26 +24,36 @@ function refresh() {
  */
 const parentOf = (form: FormData) => optNum(form, 'parentId');
 
+/** A yearly goal's last year ("Runs until"), when the form has one. */
+const untilYearOf = (form: FormData) => optNum(form, 'untilYear') ?? undefined;
+
 export async function createHorizonAction(form: FormData): Promise<void> {
-  await repo.createHorizon({
-    level: enumOf(form, 'level', LEVELS, 'week'),
+  const level = enumOf(form, 'level', LEVELS, 'week');
+  const untilYear = level === 'year' ? untilYearOf(form) : undefined;
+  const created = await repo.createHorizon({
+    level,
     title: str(form, 'title'),
     description: optStr(form, 'description'),
     periodStart: str(form, 'periodStart'),
-    periodEnd: str(form, 'periodEnd'),
+    periodEnd: untilYear ? `${untilYear}-12-31` : str(form, 'periodEnd'),
     parentId: parentOf(form),
     windowId: optNum(form, 'windowId'),
   });
+  // A goal over several years takes in a same-titled goal already set for one of them.
+  if (level === 'year') await extendYearGoal(db(), created.id);
   refresh();
 }
 
 export async function updateHorizonAction(form: FormData): Promise<void> {
-  await repo.updateHorizon(num(form, 'id'), {
+  const id = num(form, 'id');
+  await repo.updateHorizon(id, {
     title: str(form, 'title'),
     description: optStr(form, 'description'),
     parentId: parentOf(form),
     windowId: optNum(form, 'windowId'),
   });
+  const untilYear = untilYearOf(form);
+  if (untilYear !== undefined) await extendYearGoal(db(), id, untilYear);
   refresh();
 }
 

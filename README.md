@@ -23,6 +23,11 @@ Year goal          CIS-ITSM Certification                  ⏱ Learning (inherit
   Forms make the parent an explicit choice — pick one, or "No parent
   (standalone)". Anything unlinked is listed under **Not connected** on every
   planning screen, because it is missing from every progress bar above it.
+- **A yearly goal may run over several years.** Set *Runs until* on the Year
+  screen (or `2026-2027` in the CSV): it becomes one goal from 1 January of its
+  first year to 31 December of its last, shown on each year with that year's
+  months. Running it into a year where a goal of the same name exists joins the
+  two — that goal's months, weeks and tasks move under it.
 - **Progress rolls up.** Each goal's bar is the average of its children, each
   child counting equally; a goal's own tasks count as one more child, measured in
   minutes. A child with nothing planned counts as 0, so a month outcome with no
@@ -51,7 +56,7 @@ holds the Week, Month and Year screens behind one tab bar (their addresses stay
 
 | Screen | Cadence | What you do there |
 | --- | --- | --- |
-| `/year` | Once a year | Set the 40,000ft goals. Expand one to drill down through its months, weeks and tasks, each with a progress bar and forecast. |
+| `/year` | Once a year | Set the 40,000ft goals. Expand one to drill down through its months, weeks and tasks, each with a progress bar and forecast. A goal may **run over several years** (*Runs until* in its form): it is listed on each of them, marked 📅 2026 – 2027, with that year's months underneath. |
 | `/month` | First session of a month | Define outcomes for the month's goal. See the month's weeks (empty ones read as buffer) and each outcome's backlog. |
 | `/week` | First session of a week | Choose the week's priorities, **move backlog tasks into them**, quick-add tasks ("title + 1h 25m"). |
 | `/calendar` → **Today** | Every morning | **1. Review yesterday** (tick what you finished) → 2. generate → 3. commit to Google. Tick blocks off during the day. |
@@ -150,7 +155,9 @@ out. Click the bar to open it in the side panel:
 
 Saving a new vacation opens it in the panel straight away, so you see what it
 collides with at once. Upcoming vacations are also listed under the button.
-Run *Plan calendar* afterwards to move work that was planned into it.
+Run *Reschedule…* afterwards to move work that was planned into it. A multi-day
+event already in Google can be made into a vacation from its panel — see
+*Multi-day events* below.
 
 **Colours are Google's.** An event uses its own colour if it has one, else its
 calendar's — mapped to the palette Google Calendar's web app shows (the API
@@ -206,7 +213,8 @@ blocks 30–60 min, 15-minute break:
    the tasks under one month outcome are a course, done strictly in order (by
    week, then task order) — a later module can never jump ahead because it has
    a higher priority, is overdue, or happens to fit a gap. Different courses
-   still interleave.
+   still interleave. **Sequential sessions** (a training plan) follow stricter
+   rules — see below.
 5. **Pack it into calendar blocks.**
    - Short tasks are **combined** into one block (10:30–11:00 = ebook 5 +
      accessibility 5 + welcome 20).
@@ -231,6 +239,36 @@ Your CIS-ITSM week-1 modules (4h 24m) come out as:
 | Tue | 10:30–11:05 maintain (35) · 11:20–12:00 maintain (15) + improve (25) · 12:30–13:15 improve (31) + summary |
 
 Nothing that fails to fit is silently dropped: the Today view says why.
+
+### Sequential sessions (a training plan)
+
+A course may be packed back to back; a training plan may not. Tick **Sequential
+session** on a task (Tasks screen, or `sequential` = yes in the CSV) and it
+follows three rules instead. All sequential tasks of one yearly goal form one
+plan, in date order, across its months and phases:
+
+1. **One a day, in order.** Two sessions never share a day, and a session never
+   comes before the one ahead of it is done. It goes first in its window, so
+   the day it is given holds, and it is **never split**: a 55-minute training
+   gets one 55-minute block — not 40 minutes and another 15 later that
+   morning — or waits for a day with a slot that holds it.
+2. **A week is one piece.** The sessions dated in one week (Training A on
+   Monday, the treadmill on Tuesday, Training B on Wednesday…) are that week's
+   program. It only starts when all of it fits in what is left of a week — back
+   from a vacation on a Wednesday, the program waits for Monday.
+3. **An interrupted week starts again.** If a week's program cannot be finished
+   in the week it began — you leave on Wednesday — it is done again from its
+   first session the next week it fits, **the sessions already done included**,
+   and every later week moves back by the same amount. *Plan calendar* and
+   *Reschedule…* say so: "↻ The week starting with Training A · week 1 … starts
+   again on Mon 5 Oct — 2 sessions already done are done again". The sessions
+   done the first time keep their ticks as history.
+
+The week's other tasks — a weekly check-in, a shopping trip — are not sessions,
+so they may share a day, but they **move with their week**: never before the
+week's first session, and on the same weekday as before (Tuesday's check-in
+stays a Tuesday). *Reschedule…*, *Plan calendar*, *Generate the day* and the goal
+forecasts all follow these rules.
 
 ## Plan the whole calendar
 
@@ -274,6 +312,12 @@ many collide with a meeting or vacation. Nothing moves until you click
 - Left alone: ticked-off work, blocks already under way, and blocks you placed
   by hand (📌) — unless a meeting now sits on one; then it is moved too, and the
   preview says so.
+- **Work finished ahead of plan is not planned again.** A task you marked done
+  (or ticked off in full) loses its blocks still to come — even ones you placed
+  by hand — and the preview lists it under *Already finished*. A block you
+  ticked off before it began (Thursday's module, done on Tuesday evening) moves
+  back to when you ticked it, as history, so Thursday's slot opens up for the
+  next module; any part of it you did not tick is planned again.
 
 **Windows that stay empty?** Every busy Google event closes the time it covers,
 plus the 15-minute break on both sides — a multi-day event (say, Friday 10:00 –
@@ -282,6 +326,26 @@ Sunday 11:00) closes every window it spans. Mark events that only *hold* time
 panel; for a repeating event one tick covers every repeat. The **Lunch** in
 Settings is reserved on top of that every day — set its length to 0 if your
 lunch is an event in the calendar.
+
+**Multi-day events: is it a vacation?** A multi-day event made in Google says
+nothing about which kinds of work stop — a busy one blocks every window, a free
+one (most all-day events) blocks none, so a week in Crete entered only in Google
+would be planned full of work. TimeBlock therefore asks once about every
+multi-day event in the next three months: a notice above the calendar lists the
+undecided ones, and the event's panel asks too. Answer either place:
+
+- **Vacation…** opens the vacation form filled in from the event (its dates, all
+  windows ticked, its title as the note). Saved, the event stops counting as
+  busy and the vacation closes just the windows you chose. For a repeating
+  event, this makes one occurrence a vacation.
+- **Not a vacation** leaves it as Google has it and stops asking — for every
+  repeat. *Ask again* in its panel takes that back. Marking it a Placeholder
+  counts as an answer too.
+- If an event you made into a vacation later moves in Google, the notice says so;
+  **Move the vacation with it** takes the event's new dates.
+
+Events a vacation already covers, declined ones and TimeBlock's own are never
+asked about.
 
 ## Importing tasks from CSV
 
@@ -295,7 +359,7 @@ ones are matched on level + period + title (case-insensitive).
 | Column | Required | Accepts |
 | --- | --- | --- |
 | `year_goal` | with `month_outcome` | Title of the yearly goal |
-| `year` | no | `2026` — taken from `month`/`week` when blank |
+| `year` | no | `2026` — taken from `month`/`week` when blank. `2026-2027` makes the goal run over both years: rows naming it with a year inside the range (a `2027` row, tasks in 2027 months) land on that one goal, and a same-titled goal already stored for one of those years is joined into it. |
 | `month_outcome` | with `week_priority` | Title of the month outcome |
 | `month` | with `month_outcome` | `2026-10`, or any date in the month — taken from `week` when blank |
 | `week_priority` | no | Title of the week priority |
@@ -307,6 +371,7 @@ ones are matched on level + period + title (case-insensitive).
 | `due_date` | no | `2026-10-30` or `30.10.2026` |
 | `status` | no | `backlog` (default) or `active` |
 | `window` | no | A window name from Settings. On a task row it sets the task's window; on a goal-only row, the deepest goal's — that is how "Learning" is set once on a yearly goal. |
+| `sequential` | no | `yes`/`áno`/`x` for a session of a training plan (see *Sequential sessions*), `no` or empty otherwise. Without the column, a re-import leaves the flag as it is. |
 | `notes` | no | Free text |
 
 Headers are case-insensitive (`Due Date` = `due_date`); unknown columns are

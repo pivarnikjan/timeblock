@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { deleteEventAction, setEventMarkAction, toggleEventAction } from '@/app/actions/calendar';
+import { deleteEventAction, setEventMarkAction, setNotVacationAction, toggleEventAction } from '@/app/actions/calendar';
 import { deleteBlockAction, unpinBlockAction } from '@/app/actions/plan';
 import { deleteVacationAction } from '@/app/actions/vacation';
 import { ConfirmButton } from '@/components/confirm-button';
@@ -7,6 +7,7 @@ import { formatMinutes } from '@/lib/hierarchy';
 import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
 import type { Conflicts } from '@/lib/calendar/vacation-conflicts';
 import { calendarHref } from '@/lib/calendar/views';
+import { formInputs } from '@/lib/vacation';
 import { ToggleForm } from './toggle';
 import { VacationCleanup } from './vacation-cleanup';
 import { VacationForm } from './vacation-form';
@@ -88,6 +89,8 @@ function EventDetails({ data, item, close }: { data: CalendarData; item: Calenda
         </a>
       )}
 
+      {item.multiDay && <VacationQuestion data={data} item={item} />}
+
       <div className="space-y-3 border-t border-border pt-3">
         <Mark
           label="★ Important in Month view"
@@ -142,6 +145,70 @@ function EventDetails({ data, item, close }: { data: CalendarData; item: Calenda
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * A multi-day event's one question: is it a vacation? Made into one, it stops
+ * counting as busy and the vacation closes just the windows chosen; said not to
+ * be, it stays as Google has it and is not asked about again.
+ */
+function VacationQuestion({ data, item }: { data: CalendarData; item: CalendarItem }) {
+  const LINK = 'text-accent underline underline-offset-2';
+  if (item.madeVacationId !== null) {
+    return (
+      <div className="space-y-1 border-t border-border pt-3 text-xs">
+        <p>🏖 Made into a vacation — it no longer counts as busy; the vacation closes the windows you chose.</p>
+        <Link href={calendarHref(data.range.view, data.range.anchor, `vacation:${item.madeVacationId}`)} scroll={false} className={LINK}>
+          Open the vacation
+        </Link>
+      </div>
+    );
+  }
+  const decided = item.notVacation || item.placeholder;
+  return (
+    <div className="space-y-2 border-t border-border pt-3 text-xs">
+      {decided ? (
+        <div className="text-muted">
+          {item.notVacation ? 'Not a vacation, as you said' : 'A placeholder'} — it is not asked about again.
+          {item.notVacation && (
+            <form action={setNotVacationAction} className="inline">
+              <input type="hidden" name="key" value={item.hideKey!} />
+              <input type="hidden" name="title" value={item.title} />
+              <input type="hidden" name="not" value="0" />{' '}
+              <button type="submit" className={LINK}>
+                Ask again
+              </button>
+            </form>
+          )}
+        </div>
+      ) : (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5">
+          <strong>Is this a vacation?</strong> Until you say, it {item.busy ? 'blocks every window while it lasts' : 'blocks nothing — it is marked free, so work may be planned into it'}.
+        </p>
+      )}
+      <details>
+        <summary className={`cursor-pointer ${LINK}`}>Make {item.recurring ? 'this one ' : 'it '}a vacation…</summary>
+        <div className="pt-3">
+          <VacationForm
+            windows={data.windows}
+            initial={{ ...formInputs(item.start, item.end), note: item.title, sourceEvent: item.occurrence! }}
+            submitLabel="Make it a vacation"
+            googleConnected={data.connection.status === 'connected'}
+          />
+        </div>
+      </details>
+      {!decided && (
+        <form action={setNotVacationAction}>
+          <input type="hidden" name="key" value={item.hideKey!} />
+          <input type="hidden" name="title" value={item.title} />
+          <input type="hidden" name="not" value="1" />
+          <button type="submit" className={LINK} title="It stays as Google has it, and is not asked about again">
+            Not a vacation{item.recurring ? ' (every repeat)' : ''}
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
 

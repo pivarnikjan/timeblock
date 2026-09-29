@@ -19,6 +19,8 @@ export interface VacationValues {
   note: string | null;
   /** Also kept as an event in Google Calendar. */
   inGoogle?: boolean;
+  /** Set when turning a Google event into a vacation: that occurrence's key. */
+  sourceEvent?: string;
 }
 
 /**
@@ -53,6 +55,7 @@ export function VacationForm({
   return (
     <form action={action} className="space-y-3 text-sm">
       {initial.id !== undefined && <input type="hidden" name="id" value={initial.id} />}
+      {initial.sourceEvent && <input type="hidden" name="sourceEvent" value={initial.sourceEvent} />}
       <div className="grid gap-2">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted">From</span>
@@ -103,7 +106,7 @@ export function VacationForm({
 
       <p className="text-xs text-muted">
         Nothing is planned in the ticked windows while you are away. An end of 23:59 covers the whole last day. Run{' '}
-        <strong>Plan calendar</strong> afterwards to move work already planned there.
+        <strong>Reschedule…</strong> afterwards to move work already planned there.
       </p>
       {state.kind === 'error' && <p className="text-xs text-red-500">{state.message}</p>}
       {state.kind === 'saved' && state.warning && <p className="text-xs text-amber-600">{state.warning}</p>}

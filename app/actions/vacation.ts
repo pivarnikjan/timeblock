@@ -50,7 +50,9 @@ export async function saveVacationAction(_prev: VacationFormState, form: FormDat
     await updateVacation(existing, values);
     id = existing;
   } else {
-    id = await insertVacation(values);
+    // Made from a Google event: that occurrence stops counting as busy, and is not asked about again.
+    const sourceEvent = String(form.get('sourceEvent') ?? '').trim() || null;
+    id = await insertVacation({ ...values, sourceEvent });
   }
   const warning = await mirrorInGoogle(id);
   revalidatePath('/', 'layout');
@@ -73,6 +75,21 @@ async function mirrorInGoogle(id: number): Promise<string | null> {
   } catch (error) {
     return `Saved, but Google Calendar could not be updated (${(error as Error).message}). Save again to retry.`;
   }
+}
+
+/**
+ * A vacation made from a Google event that has since moved there: takes the
+ * event's new start and end (its windows and note stay).
+ */
+export async function matchEventAction(form: FormData): Promise<void> {
+  const id = num(form, 'id');
+  const startsAt = DateTime.fromISO(String(form.get('start') ?? ''));
+  const endsAt = DateTime.fromISO(String(form.get('end') ?? ''));
+  if (!startsAt.isValid || !endsAt.isValid || endsAt <= startsAt) throw new Error('The event has no usable start and end.');
+  await updateVacation(id, { startsAt: startsAt.toUTC().toISO()!, endsAt: endsAt.toUTC().toISO()! });
+  const warning = await mirrorInGoogle(id);
+  if (warning) throw new Error(warning);
+  revalidatePath('/', 'layout');
 }
 
 /**
