@@ -5,7 +5,9 @@ each morning it turns that into real time blocks in Google Calendar, fitted
 around your meetings, inside the hours you reserve for each kind of work, with a
 15-minute break after every block.
 
-Everything runs on your machine. The only network calls are to Google Calendar.
+Everything runs on your machine. The only network calls are to Google Calendar
+— and, if you use the phone app, to TimeBlock's own hidden folder in your
+Google Drive, through which the two sync ([Phone sync](#phone-sync)).
 
 What changed and when: see [`change_log.md`](change_log.md).
 
@@ -552,6 +554,21 @@ Look there first when something fails.
   process tree (npm → cmd → node). If another program holds the port, it
   refuses and names it.
 
+## Phone sync
+
+The [TimeBlock Android app](https://github.com/pivarnikjan/timeblock-mobile)
+keeps its own copy of your plan and works offline; it and the desktop sync
+through a hidden TimeBlock folder in your Google Drive — one small file per
+device, no server. The desktop sends its changes within a minute and fetches
+the phone's every five minutes and before every plan; **Settings → Phone sync**
+shows when it last synced and has **Sync now**.
+
+Per value, the later change wins (rename a task on the phone, move its due date
+here — both stay); work ticked off is never lost to a re-plan the other device
+had not seen. Drafts stay on the device that planned them until committed.
+Setup (enable the Drive API, reconnect with the Drive box ticked) and the
+details: [`docs/phone-sync.md`](docs/phone-sync.md).
+
 ## What it writes to Google
 
 On its own, only to a secondary calendar it creates itself, **TimeBlock —
@@ -578,6 +595,7 @@ always after a confirmation.
 | --- | --- |
 | Database | `%LOCALAPPDATA%\timeblock\timeblock.db` |
 | Google refresh token | `%LOCALAPPDATA%\timeblock\credentials.json` |
+| Sync file for the phone | Google Drive's hidden app data folder (see [Phone sync](#phone-sync)) |
 
 Both sit outside the repo, so cloning or copying the project never carries your
 data or your token with it. Set `TIMEBLOCK_DATA_DIR` to use a different folder
@@ -588,7 +606,7 @@ data or your token with it. Set `TIMEBLOCK_DATA_DIR` to use a different folder
 ```bash
 npm test              # scheduler, hierarchy, CSV import, database bridge
 npm run build         # type-check and production build
-npm run db:generate   # regenerate SQL after editing lib/db/schema.ts
+npm run db:generate   # regenerate SQL after editing packages/core/src/db/schema.ts
 ```
 
 To work on a change: branch, test, push, open a pull request.
@@ -604,21 +622,29 @@ Try changes against a throwaway database, never your real one: run
 `next dev` on another port with its own data folder, e.g.
 `$env:TIMEBLOCK_DATA_DIR="$env:TEMP\timeblock-test"; npx next dev --port 4322`.
 
-Migrations in `drizzle/` are applied automatically the first time the database
-is opened. Data changes drizzle-kit cannot express (seeding windows, copying old
+Migrations in `packages/core/drizzle/` are applied automatically the first time
+the database is opened (`npm run db:generate` also bundles them into
+`packages/core/src/db/migrations.ts`, which is what both apps run). Data changes drizzle-kit cannot express (seeding windows, copying old
 blocks into segments) are hand-written at the end of the migration file and
 marked as such.
 
+Code the phone app shares lives in `packages/core` (imported as
+`@timeblock/core/...`): the schema and migrations, planning, calendar layout and
+sync. It may import only itself, `luxon`, `drizzle-orm` and `fflate` — a test
+guards that, since it also runs on the phone.
+
 | Area | Where |
 | --- | --- |
-| Hierarchy, progress, window inheritance, week-of-month | `lib/hierarchy.ts` |
-| Free time, packing, day plan | `lib/scheduler/day.ts`, `lib/scheduler/plan.ts` |
-| Forecast | `lib/scheduler/forecast.ts`, `outlook()` in `lib/planner.ts` |
+| Hierarchy, progress, window inheritance, week-of-month | `packages/core/src/hierarchy.ts` |
+| Free time, packing, day plan | `packages/core/src/scheduler/day.ts`, `packages/core/src/scheduler/plan.ts` |
+| Forecast | `packages/core/src/scheduler/forecast.ts`, `outlook()` in `lib/planner.ts` |
+| Calendar layout (items, bands, colours) | `packages/core/src/calendar/` — `assemble.ts` builds a view |
+| Phone sync | `packages/core/src/sync/`, `lib/sync/service.ts` |
 | CSV parsing and import | `lib/csv/`, `lib/import/` |
-| Google sync | `lib/google/sync.ts`, `lib/google/event-content.ts` |
+| Google sync | `lib/google/sync.ts`, `packages/core/src/google/event-content.ts` |
 
 ### Stack
 
 Next.js (App Router) · SQLite through Node's built-in `node:sqlite` · Drizzle
 via its `sqlite-proxy` driver · Luxon for zone-safe interval maths · `googleapis`
-· Vitest. No native modules, so there is nothing to compile on Windows/ARM.
+· fflate (gzip for the sync file) · Vitest. No native modules, so there is nothing to compile on Windows/ARM.

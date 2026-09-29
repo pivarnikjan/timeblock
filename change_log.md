@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-09-29 | v0.12 | [E21 · Phone sync](#e21--phone-sync) | TB-082 – TB-086 | Desktop done; the Android app follows in timeblock-mobile |
 | 2026-09-29 | v0.11 | [E20 · Goals over several years](#e20--goals-over-several-years) | TB-079 – TB-080, TB-081 (fix) | Done |
 | 2026-09-29 | v0.10 | [E19 · Sequential sessions](#e19--sequential-sessions) | TB-076 – TB-078 | Done |
 | 2026-09-29 | v0.9 | [E18 · Multi-day events and finished work](#e18--multi-day-events-and-finished-work) | TB-073 – TB-075 | Done |
@@ -42,6 +43,87 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-09-29 · v0.12 — Phone sync
+
+**Theme.** The plan on the phone, offline, without hosting anything: the
+desktop and the Android app each keep a full copy and meet in a hidden folder
+in the user's own Google Drive.
+
+**Upgrade notes.** Migration `0011_sync` adds the sync bookkeeping tables; on
+first start every existing row is stamped, so the desktop's data outranks a new
+phone's defaults. New rows get time-based ids (existing ids are kept). To sync:
+enable the Google Drive API for the Cloud project and **Reconnect** with the
+Drive box ticked — see `docs/phone-sync.md`. Nothing changes until then.
+
+## E21 · Phone sync
+
+> Plan on the desktop, look at the day and tick it off on the phone — on the
+> train, with no signal — and find it all in step when either is back online.
+
+### TB-082 · The plan syncs with the phone through Google Drive
+*As a planner with the phone app, I want my goals, tasks, windows, vacations
+and committed blocks on both devices, so that I can use either, offline.*
+
+Acceptance criteria
+- [x] Each device keeps one gzip JSON file in Drive's app data folder
+      (`drive.appdata` scope: TimeBlock's own hidden folder, nothing else);
+      a round downloads only changed files and uploads only when something
+      changed.
+- [x] The desktop sends its changes within a minute, fetches the phone's
+      every five minutes, and before Plan calendar, Generate and Commit.
+- [x] **Settings → Phone sync:** last sync, **Sync now**, the devices heard
+      from, this device's name, and why the last sync failed (Drive box
+      unticked, Drive API disabled, expired sign-in).
+- [x] Draft blocks and the Calendar's default view stay on their device.
+
+### TB-083 · Both devices' edits survive
+*As a planner, I want a change on the phone and another on the desktop to both
+stay, so that I never have to choose which device "wins".*
+
+Acceptance criteria
+- [x] Every value carries a stamp (hybrid logical clock); per value, the later
+      change wins. Different fields of one task edited on each device both stay.
+- [x] A deletion wins over a row not changed since; a row changed after it was
+      deleted elsewhere comes back on both.
+- [x] Merging the same file twice changes nothing.
+
+### TB-084 · Ticked-off work is never lost to a re-plan
+*As a planner, I want work I ticked off on the phone to survive a re-plan the
+desktop made before it heard about it, so that progress is never undone.*
+
+Acceptance criteria
+- [x] A ticked segment deleted by the other device is kept, with its block, and
+      restored there — unless its task was deleted.
+
+### TB-085 · A new phone starts from the desktop's plan
+*As a planner installing the app, I want it to take the desktop's windows and
+settings, so that its defaults never overwrite mine.*
+
+Acceptance criteria
+- [x] Rows a new database was seeded with are unstamped and replaced (or
+      removed) by the first merge; an existing database is stamped on upgrade.
+- [x] Rows get ids from their creation time (× 1024 + random bits), so both
+      devices create rows without clashing; ids still sort by creation.
+- [x] Two devices marking the same ritual done keep one record.
+
+### TB-086 · A device away too long starts over
+*As a planner, I want a phone unused for months to take Drive's copy instead
+of merging, so that things deleted meanwhile do not come back.*
+
+Acceptance criteria
+- [x] Deletions are remembered for 90 days. A device whose last sync is older
+      is asked to **Replace this device's data with Drive's** or **Sync
+      anyway**; another device's file older than that is skipped.
+
+Where to look: `packages/core/src/sync/` (`install.ts` triggers, `state.ts`
+export and merge, `run.ts` rounds, `drive.ts`, + `sync.test.ts`) ·
+`packages/core/src/ids.ts` · `lib/sync/service.ts` · `app/actions/sync.ts` ·
+`components/phone-sync-card.tsx` · `docs/phone-sync.md`. The code both apps
+share moved to `packages/core` (schema and bundled migrations, scheduler,
+hierarchy, calendar layout — `calendar/assemble.ts` — and Google event parsing).
 
 ---
 

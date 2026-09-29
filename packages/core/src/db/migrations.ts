@@ -116,4 +116,13 @@ export const MIGRATIONS: readonly Migration[] = [
       "ALTER TABLE `tasks` ADD `sequential` integer DEFAULT false NOT NULL;",
     ],
   },
+  {
+    name: "0011_sync.sql",
+    statements: [
+      "CREATE TABLE `sync_meta` (\n\t`id` integer PRIMARY KEY NOT NULL,\n\t`device` text NOT NULL,\n\t`name` text DEFAULT '' NOT NULL,\n\t`clock` integer DEFAULT 0 NOT NULL,\n\t`applying` integer DEFAULT 0 NOT NULL,\n\t`file_id` text,\n\t`uploaded_hash` text,\n\t`last_sync_at` text,\n\t`last_error` text\n);",
+      "CREATE TABLE `sync_peers` (\n\t`file_id` text PRIMARY KEY NOT NULL,\n\t`device` text NOT NULL,\n\t`name` text DEFAULT '' NOT NULL,\n\t`md5` text,\n\t`clock` integer DEFAULT 0 NOT NULL,\n\t`written_at` text,\n\t`merged_at` text\n);",
+      "CREATE TABLE `sync_stamps` (\n\t`tbl` text NOT NULL,\n\t`row_id` text NOT NULL,\n\t`col` text NOT NULL,\n\t`stamp` text NOT NULL,\n\tPRIMARY KEY(`tbl`, `row_id`, `col`)\n);",
+      "CREATE TABLE `sync_tombstones` (\n\t`tbl` text NOT NULL,\n\t`row_id` text NOT NULL,\n\t`stamp` text NOT NULL,\n\tPRIMARY KEY(`tbl`, `row_id`)\n);",
+    ],
+  },
 ];

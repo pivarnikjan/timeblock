@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { newId } from '../ids';
 
 const now = sql`(strftime('%Y-%m-%dT%H:%M:%SZ','now'))`;
 
@@ -9,7 +10,7 @@ const now = sql`(strftime('%Y-%m-%dT%H:%M:%SZ','now'))`;
  * inside the window it resolves to (its own, else inherited up the goal chain).
  */
 export const timeWindows = sqliteTable('time_windows', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+  id: integer('id').primaryKey({ autoIncrement: true }).$defaultFn(() => newId()),
   name: text('name').notNull(),
   /** Local HH:mm. */
   startTime: text('start_time').notNull(),
@@ -29,7 +30,7 @@ export const timeWindows = sqliteTable('time_windows', {
 export const horizons = sqliteTable(
   'horizons',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: integer('id').primaryKey({ autoIncrement: true }).$defaultFn(() => newId()),
     level: text('level', { enum: ['year', 'quarter', 'month', 'week'] }).notNull(),
     title: text('title').notNull(),
     description: text('description'),
@@ -58,7 +59,7 @@ export const ENERGY = ['deep', 'shallow', 'admin'] as const;
 export const tasks = sqliteTable(
   'tasks',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: integer('id').primaryKey({ autoIncrement: true }).$defaultFn(() => newId()),
     title: text('title').notNull(),
     notes: text('notes'),
     /** The single week priority or month outcome this task serves. */
@@ -96,7 +97,7 @@ export const tasks = sqliteTable(
 export const blocks = sqliteTable(
   'blocks',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: integer('id').primaryKey({ autoIncrement: true }).$defaultFn(() => newId()),
     /** Local date the block belongs to, YYYY-MM-DD. */
     date: text('date').notNull(),
     /** UTC ISO instants. */
@@ -122,7 +123,7 @@ export const blocks = sqliteTable(
 export const blockSegments = sqliteTable(
   'block_segments',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: integer('id').primaryKey({ autoIncrement: true }).$defaultFn(() => newId()),
     blockId: integer('block_id').notNull(),
     taskId: integer('task_id').notNull(),
     minutes: integer('minutes').notNull(),
@@ -170,7 +171,7 @@ export const settings = sqliteTable('settings', {
 export const vacations = sqliteTable(
   'vacations',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: integer('id').primaryKey({ autoIncrement: true }).$defaultFn(() => newId()),
     /** UTC ISO instants; the end is exclusive. */
     startsAt: text('starts_at').notNull(),
     endsAt: text('ends_at').notNull(),
@@ -219,7 +220,7 @@ export const RITUALS = ['daily', 'weekly', 'monthly', 'yearly', 'review'] as con
 export const ritualLog = sqliteTable(
   'ritual_log',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: integer('id').primaryKey({ autoIncrement: true }).$defaultFn(() => newId()),
     kind: text('kind', { enum: RITUALS }).notNull(),
     /** '2026', '2026-08', '2026-W33', '2026-08-12'. */
     forPeriod: text('for_period').notNull(),
@@ -227,6 +228,75 @@ export const ritualLog = sqliteTable(
   },
   (t) => [uniqueIndex('ritual_log_kind_period_idx').on(t.kind, t.forPeriod)],
 );
+
+// ── Sync bookkeeping ────────────────────────────────────────────────────────
+// Local to each device and never synced themselves. See packages/core/src/sync.
+
+/**
+ * This device as sync knows it (a single row, id 1): its id, its clock, and
+ * where its state file lives in Google Drive. Created on first open.
+ */
+export const syncMeta = sqliteTable('sync_meta', {
+  id: integer('id').primaryKey(),
+  /** Random id: names this device's file in Drive and breaks ties between stamps. */
+  device: text('device').notNull(),
+  /** What the other devices call this one ("Desktop", "Phone"). */
+  name: text('name').notNull().default(''),
+  /** Hybrid logical clock: wall-clock milliseconds, kept past every stamp seen. */
+  clock: integer('clock').notNull().default(0),
+  /** 1 while a merge writes another device's changes, so they are not stamped as edits made here. */
+  applying: integer('applying').notNull().default(0),
+  /** This device's state file in Drive's app data folder, once created. */
+  fileId: text('file_id'),
+  /** Fingerprint of the state last uploaded; an unchanged state is not uploaded again. */
+  uploadedHash: text('uploaded_hash'),
+  /** UTC ISO instant of the last sync that completed. */
+  lastSyncAt: text('last_sync_at'),
+  /** Why the last sync failed; null after one succeeds. */
+  lastError: text('last_error'),
+});
+
+/**
+ * When each synced value last changed: `stamp` is `<clock>@<device>`, compared
+ * as text. `col` is a column name, or `*` for the row as it was inserted —
+ * a column without a stamp of its own dates from its row's insert. Written by
+ * triggers, so no code path can change data without it being noticed.
+ */
+export const syncStamps = sqliteTable(
+  'sync_stamps',
+  {
+    tbl: text('tbl').notNull(),
+    rowId: text('row_id').notNull(),
+    col: text('col').notNull(),
+    stamp: text('stamp').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.tbl, t.rowId, t.col] })],
+);
+
+/** Rows deleted here or on another device, so a stale copy elsewhere cannot bring them back. */
+export const syncTombstones = sqliteTable(
+  'sync_tombstones',
+  {
+    tbl: text('tbl').notNull(),
+    rowId: text('row_id').notNull(),
+    stamp: text('stamp').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.tbl, t.rowId] })],
+);
+
+/** The other devices' state files, and how far this device has merged each. */
+export const syncPeers = sqliteTable('sync_peers', {
+  fileId: text('file_id').primaryKey(),
+  device: text('device').notNull(),
+  name: text('name').notNull().default(''),
+  /** Drive's checksum of the file when it was last merged; unchanged files are not downloaded again. */
+  md5: text('md5'),
+  /** The peer's clock in that file. */
+  clock: integer('clock').notNull().default(0),
+  /** When the peer wrote that file (its own clock, UTC ISO). */
+  writtenAt: text('written_at'),
+  mergedAt: text('merged_at'),
+});
 
 export type TimeWindow = typeof timeWindows.$inferSelect;
 export type NewTimeWindow = typeof timeWindows.$inferInsert;
@@ -242,3 +312,5 @@ export type EventMark = typeof eventMarks.$inferSelect;
 export type Vacation = typeof vacations.$inferSelect;
 export type RitualKind = (typeof RITUALS)[number];
 export type Energy = (typeof ENERGY)[number];
+export type SyncMeta = typeof syncMeta.$inferSelect;
+export type SyncPeer = typeof syncPeers.$inferSelect;
