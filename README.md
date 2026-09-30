@@ -591,3 +591,16 @@ guards that, since it also runs on the phone.
 Next.js (App Router) · SQLite through Node's built-in `node:sqlite` · Drizzle
 via its `sqlite-proxy` driver · Luxon for zone-safe interval maths · `googleapis`
 · fflate (gzip for the sync file) · Vitest. No native modules, so there is nothing to compile on Windows/ARM.
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md). Free for personal use, study,
+research, hobby projects, and noncommercial organisations (charities, schools,
+public bodies). The Android app ([timeblock-mobile](https://github.com/pivarnikjan/timeblock-mobile)) is under the same license.
+
+**Commercial use** — using it in or for a company, or building on it for
+profit — needs a separate commercial license. To get one, contact the author
+through [GitHub](https://github.com/pivarnikjan).
+
+Contributions can only be accepted with an agreement that lets the author
+license them the same way; please ask before opening a pull request.

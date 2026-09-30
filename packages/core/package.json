@@ -2,6 +2,7 @@
   "name": "@timeblock/core",
   "version": "0.1.0",
   "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
   "description": "What the TimeBlock desktop app and phone app share: the database schema and migrations, planning, calendar layout, and sync.",
   "type": "module",
   "exports": {
