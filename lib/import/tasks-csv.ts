@@ -1,9 +1,9 @@
 import { DateTime } from 'luxon';
-import { ENERGY, type Energy, type Horizon, type Task, type TimeWindow } from '@/lib/db/schema';
+import { ENERGY, type Energy, type Horizon, type Task, type TimeWindow } from '@timeblock/core/db/schema';
 import { parseDuration } from '@/lib/csv/duration';
 import { readTable } from '@/lib/csv/parse';
-import { weekOfMonth } from '@/lib/hierarchy';
-import { periodFor, type Level } from '@/lib/time/periods';
+import { weekOfMonth } from '@timeblock/core/hierarchy';
+import { periodFor, type Level } from '@timeblock/core/time/periods';
 
 /**
  * CSV → an ordered list of operations, with nothing written.

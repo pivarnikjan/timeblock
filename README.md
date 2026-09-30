@@ -5,7 +5,9 @@ each morning it turns that into real time blocks in Google Calendar, fitted
 around your meetings, inside the hours you reserve for each kind of work, with a
 15-minute break after every block.
 
-Everything runs on your machine. The only network calls are to Google Calendar.
+Everything runs on your machine. The only network calls are to Google Calendar
+— and, if you use the phone app, to TimeBlock's own hidden folder in your
+Google Drive, through which the two sync ([Phone sync](#phone-sync)).
 
 What changed and when: see [`change_log.md`](change_log.md).
 
@@ -408,67 +410,10 @@ an example — edit it to your plan.
 
 ## Prerequisites
 
-Everything needed to run and work on TimeBlock on a new Windows computer. The
-app itself is plain Node.js; the start, stop and autostart scripts are
-Windows PowerShell.
-
-| Tool | Why | Install | Check |
-| --- | --- | --- | --- |
-| **Node.js 24 LTS or newer** (tested on 26) | Runs the app; the database is Node's built-in `node:sqlite` | `winget install --id OpenJS.NodeJS.LTS --source winget` | `node -v` |
-| **Git** | Get the code, commit | `winget install --id Git.Git --source winget` | `git --version` |
-| **GitHub SSH key** | Clone and push `git@github.com:…` | see [GitHub over SSH](#github-over-ssh) | `ssh -T git@github.com` |
-| **GitHub CLI** (optional) | Open pull requests from the terminal | `winget install --id GitHub.cli --source winget` | `gh --version` |
-| **Google account + Cloud project** | Calendar access | [`docs/google-calendar-setup.md`](docs/google-calendar-setup.md) | **Settings** shows *Connected* |
-
-### Installing with winget
-
-- **Always add `--source winget`.** Without it winget also searches the
-  Microsoft Store, and on a machine whose HTTPS traffic is inspected — an
-  antivirus with HTTPS scanning (e.g. Avast Web Shield) or a company proxy —
-  that fails with `Failed when searching source: msstore … 0x8a15005e : The
-  server certificate did not match any of the expected values`. None of these
-  tools come from the Store.
-- **If winget still fails with a certificate error**, download the installer
-  from the vendor instead: [nodejs.org](https://nodejs.org) (LTS),
-  [git-scm.com](https://git-scm.com/download/win),
-  [cli.github.com](https://cli.github.com) (`gh_*_windows_amd64.msi`).
-- **Open a new terminal after installing.** A terminal that was already open
-  does not see the new program, so it answers `The term 'gh' is not recognized
-  as the name of a cmdlet…`. If a new terminal still does not find it, call it
-  by its full path, e.g. `& "C:\Program Files\GitHub CLI\gh.exe" auth login`.
-
-### GitHub over SSH
-
-Once per computer:
-
-```powershell
-ssh-keygen -t ed25519 -C "you@example.com"   # accept the default file; a passphrase is recommended
-Get-Content $HOME\.ssh\id_ed25519.pub | Set-Clipboard
-```
-
-Paste the key into GitHub → **Settings → SSH and GPG keys → New SSH key**, then
-check with `ssh -T git@github.com` (answer *yes* the first time; it greets you
-by username).
-
-Set your commit identity for this repository. GitHub's no-reply address keeps
-your personal email out of the public history (find it under GitHub →
-**Settings → Emails**):
-
-```powershell
-git config user.name "your-github-username"
-git config user.email "ID+your-github-username@users.noreply.github.com"
-```
-
-### GitHub CLI (for pull requests)
-
-After installing, in a **new** terminal:
-
-```powershell
-gh auth login   # GitHub.com → SSH → your key → Login with a web browser
-gh auth status
-```
-
-Without `gh`, open a pull request from the branch's page on GitHub instead.
+Node.js 24+, Git, a GitHub SSH key, optionally the GitHub CLI, and a Google
+Cloud project — what to install on a new Windows computer, and how (including
+winget's certificate trouble): [`docs/prerequisites.md`](docs/prerequisites.md).
+To build the phone app on this computer as well: [`docs/android-sdk.md`](docs/android-sdk.md).
 
 ## Setup
 
@@ -552,6 +497,21 @@ Look there first when something fails.
   process tree (npm → cmd → node). If another program holds the port, it
   refuses and names it.
 
+## Phone sync
+
+The [TimeBlock Android app](https://github.com/pivarnikjan/timeblock-mobile)
+keeps its own copy of your plan and works offline; it and the desktop sync
+through a hidden TimeBlock folder in your Google Drive — one small file per
+device, no server. The desktop sends its changes within a minute and fetches
+the phone's every five minutes and before every plan; **Settings → Phone sync**
+shows when it last synced and has **Sync now**.
+
+Per value, the later change wins (rename a task on the phone, move its due date
+here — both stay); work ticked off is never lost to a re-plan the other device
+had not seen. Drafts stay on the device that planned them until committed.
+Setup (enable the Drive API, reconnect with the Drive box ticked) and the
+details: [`docs/phone-sync.md`](docs/phone-sync.md).
+
 ## What it writes to Google
 
 On its own, only to a secondary calendar it creates itself, **TimeBlock —
@@ -578,6 +538,7 @@ always after a confirmation.
 | --- | --- |
 | Database | `%LOCALAPPDATA%\timeblock\timeblock.db` |
 | Google refresh token | `%LOCALAPPDATA%\timeblock\credentials.json` |
+| Sync file for the phone | Google Drive's hidden app data folder (see [Phone sync](#phone-sync)) |
 
 Both sit outside the repo, so cloning or copying the project never carries your
 data or your token with it. Set `TIMEBLOCK_DATA_DIR` to use a different folder
@@ -588,7 +549,7 @@ data or your token with it. Set `TIMEBLOCK_DATA_DIR` to use a different folder
 ```bash
 npm test              # scheduler, hierarchy, CSV import, database bridge
 npm run build         # type-check and production build
-npm run db:generate   # regenerate SQL after editing lib/db/schema.ts
+npm run db:generate   # regenerate SQL after editing packages/core/src/db/schema.ts
 ```
 
 To work on a change: branch, test, push, open a pull request.
@@ -604,21 +565,42 @@ Try changes against a throwaway database, never your real one: run
 `next dev` on another port with its own data folder, e.g.
 `$env:TIMEBLOCK_DATA_DIR="$env:TEMP\timeblock-test"; npx next dev --port 4322`.
 
-Migrations in `drizzle/` are applied automatically the first time the database
-is opened. Data changes drizzle-kit cannot express (seeding windows, copying old
+Migrations in `packages/core/drizzle/` are applied automatically the first time
+the database is opened (`npm run db:generate` also bundles them into
+`packages/core/src/db/migrations.ts`, which is what both apps run). Data changes drizzle-kit cannot express (seeding windows, copying old
 blocks into segments) are hand-written at the end of the migration file and
 marked as such.
 
+Code the phone app shares lives in `packages/core` (imported as
+`@timeblock/core/...`): the schema and migrations, planning, calendar layout and
+sync. It may import only itself, `luxon`, `drizzle-orm` and `fflate` — a test
+guards that, since it also runs on the phone.
+
 | Area | Where |
 | --- | --- |
-| Hierarchy, progress, window inheritance, week-of-month | `lib/hierarchy.ts` |
-| Free time, packing, day plan | `lib/scheduler/day.ts`, `lib/scheduler/plan.ts` |
-| Forecast | `lib/scheduler/forecast.ts`, `outlook()` in `lib/planner.ts` |
+| Hierarchy, progress, window inheritance, week-of-month | `packages/core/src/hierarchy.ts` |
+| Free time, packing, day plan | `packages/core/src/scheduler/day.ts`, `packages/core/src/scheduler/plan.ts` |
+| Forecast | `packages/core/src/scheduler/forecast.ts`, `outlook()` in `lib/planner.ts` |
+| Calendar layout (items, bands, colours) | `packages/core/src/calendar/` — `assemble.ts` builds a view |
+| Phone sync | `packages/core/src/sync/`, `lib/sync/service.ts` |
 | CSV parsing and import | `lib/csv/`, `lib/import/` |
-| Google sync | `lib/google/sync.ts`, `lib/google/event-content.ts` |
+| Google sync | `lib/google/sync.ts`, `packages/core/src/google/event-content.ts` |
 
 ### Stack
 
 Next.js (App Router) · SQLite through Node's built-in `node:sqlite` · Drizzle
 via its `sqlite-proxy` driver · Luxon for zone-safe interval maths · `googleapis`
-· Vitest. No native modules, so there is nothing to compile on Windows/ARM.
+· fflate (gzip for the sync file) · Vitest. No native modules, so there is nothing to compile on Windows/ARM.
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md). Free for personal use, study,
+research, hobby projects, and noncommercial organisations (charities, schools,
+public bodies). The Android app ([timeblock-mobile](https://github.com/pivarnikjan/timeblock-mobile)) is under the same license.
+
+**Commercial use** — using it in or for a company, or building on it for
+profit — needs a separate commercial license. To get one, contact the author
+through [GitHub](https://github.com/pivarnikjan).
+
+Contributions can only be accepted with an agreement that lets the author
+license them the same way; please ask before opening a pull request.

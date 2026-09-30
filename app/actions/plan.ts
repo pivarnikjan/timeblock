@@ -19,12 +19,17 @@ import * as blockRepo from '@/lib/repo/blocks';
 import { completeRitual } from '@/lib/repo/rituals';
 import { getSettings } from '@/lib/repo/settings';
 import { syncCompletion } from '@/lib/repo/tasks';
+import { syncQuietly } from '@/lib/sync/service';
 
 function refresh() {
   revalidatePath('/', 'layout');
 }
 
+/** Plans start from what the phone knows too — above all, work ticked off there. */
+const pullFromPhone = () => syncQuietly(30_000);
+
 export async function generatePlanAction(form: FormData): Promise<void> {
+  await pullFromPhone();
   await generateDay(str(form, 'date'));
   refresh();
 }
@@ -32,6 +37,7 @@ export async function generatePlanAction(form: FormData): Promise<void> {
 /** Commits the day's drafts to Google and records the daily ritual as done. */
 export async function commitPlanAction(form: FormData): Promise<void> {
   const date = str(form, 'date');
+  await pullFromPhone();
   await commitDay(date);
   await syncBlockColors(date);
   await completeRitual('daily', date);
@@ -97,6 +103,7 @@ export async function planCalendarAction(_prev: PlanCalendarState, form: FormDat
     const from = today(await getSettings());
     let state: PlanCalendarState;
     if (intent === 'cancel') return { kind: 'idle' };
+    if (intent === 'plan' || intent === 'commit' || intent === 'reschedule-preview') await pullFromPhone();
     if (intent === 'reschedule-preview') return { kind: 'reschedule-preview', summary: await previewReschedule() };
     if (intent === 'commit') state = { kind: 'committed', result: await commitFrom(from) };
     else if (intent === 'discard') state = { kind: 'discarded', blocks: await blockRepo.deleteDraftsFrom(from) };

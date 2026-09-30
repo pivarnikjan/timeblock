@@ -1,8 +1,10 @@
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { drizzle } from 'drizzle-orm/sqlite-proxy';
-import { runMigrations, seedSettings } from './migrate';
+import { isNewDatabase, runMigrations, seedSettings } from '@timeblock/core/db/migrate';
+import { installSync } from '@timeblock/core/sync/install';
+import { nodeDriver } from './driver';
 import { dbPath } from './paths';
-import * as schema from './schema';
+import * as schema from '@timeblock/core/db/schema';
 
 type ProxyMethod = 'all' | 'run' | 'get' | 'values';
 type Bindable = null | number | bigint | string | Uint8Array;
@@ -34,8 +36,11 @@ function openDatabase(): DatabaseSync {
   db.exec('PRAGMA busy_timeout = 5000');
   // Single-user local app: migrating on open is cheaper than remembering to run
   // a CLI step, and it keeps the schema honest after a `git pull`.
-  runMigrations(db);
-  seedSettings(db);
+  const driver = nodeDriver(db);
+  runMigrations(driver);
+  seedSettings(driver);
+  // After seeding, so a new database's defaults stay unstamped and lose to real data on the first sync.
+  installSync(driver, { newDatabase: isNewDatabase(driver), name: 'Desktop' });
   return db;
 }
 

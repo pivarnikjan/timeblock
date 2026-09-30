@@ -3,11 +3,11 @@ import { deleteEventAction, setEventMarkAction, setNotVacationAction, toggleEven
 import { deleteBlockAction, unpinBlockAction } from '@/app/actions/plan';
 import { deleteVacationAction } from '@/app/actions/vacation';
 import { ConfirmButton } from '@/components/confirm-button';
-import { formatMinutes } from '@/lib/hierarchy';
+import { formatMinutes } from '@timeblock/core/hierarchy';
 import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
 import type { Conflicts } from '@/lib/calendar/vacation-conflicts';
-import { calendarHref } from '@/lib/calendar/views';
-import { formInputs } from '@/lib/vacation';
+import { calendarHref } from '@timeblock/core/calendar/views';
+import { formInputs } from '@timeblock/core/vacation';
 import { ToggleForm } from './toggle';
 import { VacationCleanup } from './vacation-cleanup';
 import { VacationForm } from './vacation-form';

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { DateTime } from 'luxon';
 import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
-import { layoutLanes } from '@/lib/calendar/layout';
+import { layoutLanes } from '@timeblock/core/calendar/layout';
 import { chipStyle, ItemLink } from './event-chip';
 
 const BAR_PX = 20;

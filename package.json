@@ -2,6 +2,7 @@
   "name": "timeblock",
   "version": "0.1.0",
   "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
   "scripts": {
     "dev": "next dev --port 4321",
     "build": "next build",
@@ -9,10 +10,11 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate && node packages/core/scripts/bundle-migrations.mjs"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
+    "fflate": "^0.8.3",
     "googleapis": "^174.0.1",
     "luxon": "^3.7.2",
     "next": "16.3.0",

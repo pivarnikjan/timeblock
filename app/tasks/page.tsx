@@ -7,13 +7,13 @@ import {
 } from '@/app/actions/tasks';
 import { WindowSelect } from '@/components/horizon-screen';
 import { Breadcrumb } from '@/components/progress';
-import { ENERGY, type Horizon, type Task, type TimeWindow } from '@/lib/db/schema';
-import { breadcrumb, indexHorizons, type HorizonIndex } from '@/lib/hierarchy';
+import { ENERGY, type Horizon, type Task, type TimeWindow } from '@timeblock/core/db/schema';
+import { breadcrumb, indexHorizons, type HorizonIndex } from '@timeblock/core/hierarchy';
 import { listAllHorizons } from '@/lib/repo/horizons';
 import { getSettings } from '@/lib/repo/settings';
 import { listTasks } from '@/lib/repo/tasks';
 import { listWindows } from '@/lib/repo/windows';
-import { nowIn } from '@/lib/time/periods';
+import { nowIn } from '@timeblock/core/time/periods';
 import {
   Button,
   Card,

@@ -1,13 +1,10 @@
 import 'server-only';
 import { and, asc, eq, gte, inArray, isNotNull, lt, lte, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { blocks, blockSegments, tasks, type Block, type BlockSegment, type Task } from '@/lib/db/schema';
+import { isLocked, type BlockWithSegments } from '@timeblock/core/blocks';
+import { blocks, blockSegments, tasks, type Block } from '@timeblock/core/db/schema';
 
-export type SegmentWithTask = BlockSegment & { task: Task };
-export type BlockWithSegments = Block & { segments: SegmentWithTask[] };
-
-/** A block counts as history once any part of it is ticked off; re-planning never touches it. */
-export const isLocked = (block: BlockWithSegments) => block.segments.some((s) => s.doneAt !== null);
+export { isFixed, isLocked, type BlockWithSegments, type SegmentWithTask } from '@timeblock/core/blocks';
 
 async function withSegments(rows: Block[]): Promise<BlockWithSegments[]> {
   if (rows.length === 0) return [];
@@ -120,12 +117,6 @@ export interface DraftBlock {
   windowId: number | null;
   segments: { taskId: number; minutes: number }[];
 }
-
-/**
- * A block planning must leave where it is: ticked-off work is history, and a
- * block the user placed by hand stays where they put it.
- */
-export const isFixed = (block: BlockWithSegments) => block.state === 'done' || isLocked(block) || block.pinned;
 
 /** Stores one planned block as a draft and returns its id. */
 export async function insertDraft(date: string, draft: DraftBlock): Promise<number> {

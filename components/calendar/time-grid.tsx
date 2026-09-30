@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { DateTime } from 'luxon';
 import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
-import { textOn } from '@/lib/calendar/colors';
-import { layoutColumns, layoutLanes } from '@/lib/calendar/layout';
-import { vacationPieces, type VacationPiece } from '@/lib/calendar/vacation-overlay';
+import { textOn } from '@timeblock/core/calendar/colors';
+import { layoutColumns, layoutLanes } from '@timeblock/core/calendar/layout';
+import { vacationPieces, type VacationPiece } from '@timeblock/core/calendar/vacation-overlay';
 import { DraggableBlock } from './draggable-block';
 import { chipStyle, ItemLink, itemHref } from './event-chip';
 import { ScrollArea } from './scroll-area';

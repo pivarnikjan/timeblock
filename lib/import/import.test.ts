@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { asc } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { horizons, tasks, timeWindows } from '@/lib/db/schema';
+import { horizons, tasks, timeWindows } from '@timeblock/core/db/schema';
 import { testDb } from '@/lib/db/testing';
-import { breadcrumb, computeProgress, effectiveWindowId, indexHorizons } from '@/lib/hierarchy';
+import { breadcrumb, computeProgress, effectiveWindowId, indexHorizons } from '@timeblock/core/hierarchy';
 import { applyImport } from './apply';
 import { parseImport, parseLocalDate, parseWeek, planImport } from './tasks-csv';
 

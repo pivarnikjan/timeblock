@@ -1,7 +1,8 @@
 import 'server-only';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { blocks, blockSegments, tasks, type NewTask, type Task } from '@/lib/db/schema';
+import { statusAfterTicks } from '@timeblock/core/blocks';
+import { blocks, blockSegments, tasks, type NewTask, type Task } from '@timeblock/core/db/schema';
 
 export type TaskStatus = Task['status'];
 
@@ -75,9 +76,7 @@ export async function deleteTask(id: number): Promise<void> {
 export async function syncCompletion(taskIds: number[], ticked: Map<number, number>): Promise<void> {
   for (const id of taskIds) {
     const task = await getTask(id);
-    if (!task || task.status === 'dropped') continue;
-    const done = (ticked.get(id) ?? 0) >= task.estimateMin;
-    if (done && task.status !== 'done') await setTaskStatus(id, 'done');
-    if (!done && task.status === 'done') await setTaskStatus(id, 'active');
+    const next = task ? statusAfterTicks(task, ticked.get(id) ?? 0) : null;
+    if (next) await setTaskStatus(id, next);
   }
 }

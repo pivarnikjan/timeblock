@@ -37,10 +37,13 @@ creates is tagged, and only tagged events are ever changed or deleted.
    **Create**.
 4. Make sure the new project is selected in the project picker before continuing.
 
-## Step 2 — Enable the Google Calendar API
+## Step 2 — Enable the Google Calendar and Drive APIs
 
 1. Open **Menu ☰ → APIs & Services → Library**.
 2. Search for **Google Calendar API**, open it, click **Enable**.
+3. Back in the Library, search for **Google Drive API** and **Enable** it too.
+   TimeBlock uses only its own hidden folder there, to sync with the phone app
+   ([phone-sync.md](phone-sync.md)).
 
 ## Step 3 — Set up the consent screen (Google Auth platform)
 
@@ -58,6 +61,8 @@ creates is tagged, and only tagged events are ever changed or deleted.
    only listed test users can connect.
 7. **Scopes:** **Data Access → Add or Remove Scopes**, add
    - `https://www.googleapis.com/auth/calendar`
+   - `https://www.googleapis.com/auth/drive.appdata` (TimeBlock's own hidden
+     Drive folder, for phone sync — it cannot see your files)
    - `https://www.googleapis.com/auth/userinfo.email`
 
    then **Update** and **Save**. (TimeBlock asks for these at connect time
@@ -113,6 +118,9 @@ creates is tagged, and only tagged events are ever changed or deleted.
    using Google Calendar"* (or **Select all**), then **Continue**. Signing in
    without it still "works" on Google's side, so TimeBlock checks: if the box
    was left unticked, it keeps nothing and asks you to connect again.
+   Tick *"See, create, and delete its own configuration data in your Google
+   Drive"* as well if you will use the phone app — without it everything else
+   works, and **Settings → Phone sync** asks you to reconnect.
 5. You land back on Settings with **Google account connected** and your
    address shown.
 

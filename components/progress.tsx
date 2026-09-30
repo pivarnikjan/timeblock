@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import { formatMinutes, type Progress } from '@/lib/hierarchy';
+import { formatMinutes, type Progress } from '@timeblock/core/hierarchy';
 import type { HorizonOutlook } from '@/lib/planner';
 
 /**

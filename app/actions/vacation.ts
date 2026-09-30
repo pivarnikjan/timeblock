@@ -11,7 +11,7 @@ import * as blockRepo from '@/lib/repo/blocks';
 import { getSettings } from '@/lib/repo/settings';
 import { deleteVacation, getVacation, insertVacation, setVacationEvent, updateVacation } from '@/lib/repo/vacations';
 import { listWindows } from '@/lib/repo/windows';
-import { ANYTIME, closedWindows, formatWindows } from '@/lib/vacation';
+import { ANYTIME, closedWindows, formatWindows } from '@timeblock/core/vacation';
 
 export type VacationFormState =
   | { kind: 'idle' }

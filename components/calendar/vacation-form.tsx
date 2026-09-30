@@ -3,8 +3,8 @@
 import { useActionState } from 'react';
 import { saveVacationAction, type VacationFormState } from '@/app/actions/vacation';
 import { Button } from '@/components/ui';
-import type { WindowLegend } from '@/lib/calendar/bands';
-import { ANYTIME } from '@/lib/vacation';
+import type { WindowLegend } from '@timeblock/core/calendar/bands';
+import { ANYTIME } from '@timeblock/core/vacation';
 
 const INPUT = 'w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-accent';
 

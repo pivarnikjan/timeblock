@@ -2,8 +2,8 @@ import 'server-only';
 import { DateTime } from 'luxon';
 import { and, eq, or } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { ritualLog, type RitualKind } from '@/lib/db/schema';
-import { keyFor } from '@/lib/time/periods';
+import { ritualLog, type RitualKind } from '@timeblock/core/db/schema';
+import { keyFor } from '@timeblock/core/time/periods';
 
 export async function completeRitual(kind: RitualKind, forPeriod: string): Promise<void> {
   await db()

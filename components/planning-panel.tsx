@@ -13,12 +13,12 @@ import { completeRitualAction } from '@/app/actions/rituals';
 import { setTaskStatusAction } from '@/app/actions/tasks';
 import { Breadcrumb, ProgressBar } from '@/components/progress';
 import { Button, Card, Chip, EmptyState } from '@/components/ui';
-import { ancestry, breadcrumb, formatMinutes, weekOfMonth } from '@/lib/hierarchy';
+import { ancestry, breadcrumb, formatMinutes, weekOfMonth } from '@timeblock/core/hierarchy';
 import type { DayView } from '@/lib/planner';
 import * as blockRepo from '@/lib/repo/blocks';
 import { isRitualDone, ritualSteps } from '@/lib/repo/rituals';
-import { minutes } from '@/lib/scheduler/intervals';
-import { rankTasks } from '@/lib/scheduler/plan';
+import { minutes } from '@timeblock/core/scheduler/intervals';
+import { rankTasks } from '@timeblock/core/scheduler/plan';
 
 /** How many of the waiting tasks the day view lists, next up first. */
 const LIST_LIMIT = 15;

@@ -1,8 +1,8 @@
 import 'server-only';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { settings, type Settings } from '@/lib/db/schema';
-import { parseFilters, type CalendarFilters } from '@/lib/calendar/filters';
+import { settings, type Settings } from '@timeblock/core/db/schema';
+import { parseFilters, type CalendarFilters } from '@timeblock/core/calendar/filters';
 
 /** The settings singleton. Seeded on first database open, so this never returns undefined. */
 export async function getSettings(): Promise<Settings> {

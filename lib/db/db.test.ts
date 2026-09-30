@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { blocks, eventMarks, horizons, settings, tasks, timeWindows, vacations } from './schema';
+import { blocks, eventMarks, horizons, settings, tasks, timeWindows, vacations } from '@timeblock/core/db/schema';
 import { testDb } from './testing';
 
 describe('sqlite-proxy bridge over node:sqlite', () => {
@@ -131,5 +131,22 @@ describe('sqlite-proxy bridge over node:sqlite', () => {
     const [v] = await db.insert(vacations).values({ startsAt: '2026-10-01T22:00:00Z', endsAt: '2026-10-03T22:00:00Z', windows: '1,2' }).returning();
 
     expect(v).toMatchObject({ inGoogle: false, googleEventId: null });
+  });
+});
+
+describe('ready for phone sync', () => {
+  it('gives new rows ids another device cannot also hand out, and stamps what the app writes', async () => {
+    const { db, sqlite } = testDb();
+
+    const [task] = await db.insert(tasks).values({ title: 'Stamped' }).returning();
+    await db.update(tasks).set({ priority: 1 }).where(eq(tasks.id, task.id));
+
+    // Creation time × 1024 plus random bits: far above the old autoincrement ids.
+    expect(task.id).toBeGreaterThan(Date.parse('2026-01-01') * 1024);
+    expect(Number.isSafeInteger(task.id)).toBe(true);
+    const stamps = sqlite
+      .prepare("SELECT col FROM sync_stamps WHERE tbl = 'tasks' AND row_id = ? ORDER BY col")
+      .all(String(task.id));
+    expect(stamps).toEqual([{ col: '*' }, { col: 'priority' }]);
   });
 });

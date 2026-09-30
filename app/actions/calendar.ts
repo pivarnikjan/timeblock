@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { VIEWS } from '@/lib/calendar/views';
+import { VIEWS } from '@timeblock/core/calendar/views';
 import { enumOf, str } from '@/lib/forms';
 import { deleteCalendarEvent } from '@/lib/google/calendar';
 import { setMark } from '@/lib/repo/event-marks';

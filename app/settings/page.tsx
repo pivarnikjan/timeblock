@@ -11,16 +11,18 @@ import {
 import { restoreEventsAction, toggleCalendarAction, updateCalendarSettingsAction } from '@/app/actions/calendar';
 import { ToggleForm } from '@/components/calendar/toggle';
 import { CsvImportForm } from '@/components/csv-import-form';
-import { WINDOW_PALETTE, windowColors } from '@/lib/calendar/colors';
-import { parseFilters } from '@/lib/calendar/filters';
-import { VIEW_LABEL, VIEWS } from '@/lib/calendar/views';
-import type { Settings, TimeWindow } from '@/lib/db/schema';
+import { WINDOW_PALETTE, windowColors } from '@timeblock/core/calendar/colors';
+import { parseFilters } from '@timeblock/core/calendar/filters';
+import { VIEW_LABEL, VIEWS } from '@timeblock/core/calendar/views';
+import type { Settings, TimeWindow } from '@timeblock/core/db/schema';
 import { listWindows } from '@/lib/repo/windows';
 import { listCalendars, type CalendarSummary } from '@/lib/google/calendar';
 import { connectionState } from '@/lib/google/client';
 import { redirectUri } from '@/lib/google/credentials';
 import { getSettings } from '@/lib/repo/settings';
 import { Button, Card, Field, Input, PageHeader } from '@/components/ui';
+import { PhoneSyncCard } from '@/components/phone-sync-card';
+import { syncStatus } from '@/lib/sync/service';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,6 +80,15 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
   const error = typeof params.error === 'string' ? params.error : null;
   const reason = typeof params.reason === 'string' ? params.reason : null;
   const connected = params.connected === '1';
+  const synced =
+    typeof params.synced === 'string'
+      ? {
+          ok: params.synced === '1',
+          changes: Number(params.changes) || 0,
+          uploaded: params.uploaded === '1',
+          warning: typeof params.warning === 'string' ? params.warning : null,
+        }
+      : null;
   const recolour =
     typeof params.colorError === 'string'
       ? ({ kind: 'error', message: params.colorError } as const)
@@ -188,6 +199,8 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
           </div>
         )}
       </Card>
+
+      <PhoneSyncCard status={syncStatus()} outcome={synced} />
 
       <Card>
         <h2 className="mb-3 text-sm font-medium">Day shape</h2>

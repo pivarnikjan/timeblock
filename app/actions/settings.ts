@@ -7,7 +7,7 @@ import { num, optNum, optStr, str } from '@/lib/forms';
 import { updateSettings } from '@/lib/repo/settings';
 import { syncBlockColors } from '@/lib/google/sync';
 import { createWindow, deleteWindow, listWindows, updateWindow } from '@/lib/repo/windows';
-import { parseHexColor, windowColors } from '@/lib/calendar/colors';
+import { parseHexColor, windowColors } from '@timeblock/core/calendar/colors';
 
 export async function updateDayShapeAction(form: FormData): Promise<void> {
   await updateSettings({
