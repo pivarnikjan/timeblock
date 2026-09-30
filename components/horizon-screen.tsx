@@ -25,21 +25,24 @@ import { Button, Card, Chip, EmptyState, Field, Input, PageHeader, Select, Texta
 
 type ReviewLevel = 'year' | 'month' | 'week';
 
-const COPY: Record<ReviewLevel, { title: string; subtitle: string; noun: string }> = {
+const COPY: Record<ReviewLevel, { title: string; subtitle: string; noun: string; nouns: string }> = {
   year: {
     title: 'Year',
     subtitle: 'The 40,000ft view. Expand a goal to drill down through its months, weeks and tasks.',
     noun: 'yearly goal',
+    nouns: 'yearly goals',
   },
   month: {
     title: 'Month',
     subtitle: 'What has to be true by month end. Each outcome serves one yearly goal; its weeks and backlog sit underneath.',
     noun: 'monthly outcome',
+    nouns: 'monthly outcomes',
   },
   week: {
     title: 'Week',
     subtitle: 'The few priorities this week is about. Tasks under them are scheduled as soon as there is room — the week is their deadline.',
     noun: 'weekly priority',
+    nouns: 'weekly priorities',
   },
 };
 
@@ -115,7 +118,7 @@ export async function HorizonScreen({ level, date }: { level: ReviewLevel; date?
 
       {items.length === 0 ? (
         <EmptyState>
-          No {copy.noun}s yet for {heading}.
+          No {copy.nouns} yet for {heading}.
         </EmptyState>
       ) : (
         <ul className="space-y-3">
