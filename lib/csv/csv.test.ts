@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDuration } from './duration';
+import { parseDuration } from '@timeblock/core/time/duration';
 import { detectDelimiter, parseCsv, readTable } from './parse';
 
 describe('CSV parsing', () => {

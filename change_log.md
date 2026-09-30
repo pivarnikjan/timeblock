@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-09-30 | v0.13 | [E22 · The whole planner on the phone](#e22--the-whole-planner-on-the-phone) | TB-087 | In progress — shared planner done; the phone screens follow in timeblock-mobile |
 | 2026-09-29 | v0.12 | [E21 · Phone sync](#e21--phone-sync) | TB-082 – TB-086 | Desktop done; the Android app follows in timeblock-mobile |
 | 2026-09-29 | v0.11 | [E20 · Goals over several years](#e20--goals-over-several-years) | TB-079 – TB-080, TB-081 (fix) | Done |
 | 2026-09-29 | v0.10 | [E19 · Sequential sessions](#e19--sequential-sessions) | TB-076 – TB-078 | Done |
@@ -43,6 +44,49 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-09-30 · v0.13 — The whole planner on the phone
+
+**Theme.** Everything the desktop plans with — Plan calendar, Reschedule, the
+day's review and commit, vacations, goals and tasks — available on the phone
+too, running the very same code.
+
+**Upgrade notes.** No migration and no visible change on the desktop: its
+planner, database reads and writes, and Google Calendar writes moved into
+`packages/core`, and the desktop now calls them there.
+
+## E22 · The whole planner on the phone
+
+> Plan, re-plan and commit from wherever I am, with the same rules as at my
+> desk.
+
+### TB-087 · One planner for both apps
+*As a planner using both apps, I want the phone to plan exactly as the desktop
+does, so that a plan never depends on which device made it.*
+
+Acceptance criteria
+- [x] The planner (Plan calendar, Reschedule, Generate the day, the forecast),
+      the database reads and writes, and TimeBlock's writes to Google Calendar
+      live in `packages/core`, and take an `Env` — the database plus Google
+      access — that each app builds for itself.
+- [x] Google Calendar is reached through one REST client over `fetch`
+      (`google/calendar-api.ts`), as Drive already was; a 401 is retried once
+      with a renewed token, and Google's refusals keep the shape the "missing
+      scope" and "already gone" checks expect.
+- [x] What the desktop's buttons do — tick off, review, commit a day, move,
+      unpin or delete a block, save or delete a vacation, clean up during one,
+      delete a Google event, add goals and quick-add tasks — is in
+      `operations/`, so the phone's buttons do exactly the same.
+- [x] The desktop behaves as before: every screen, form and test is unchanged.
+
+Where to look: `packages/core/src/env.ts`, `planner.ts`, `store/`,
+`operations/`, `google/calendar-api.ts` (+ `calendar-api.test.ts`),
+`google/reads.ts`, `google/writes.ts`, `google/fake-calendar.ts`,
+`calendar/load.ts`, `calendar/vacation-conflicts.ts` · `lib/env.ts` (the
+desktop's `Env`) · `lib/core-services.test.ts` (plan → commit → tick → move →
+delete, reschedule and vacations over a real database with Google faked).
 
 ---
 

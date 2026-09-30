@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 import { ENERGY, type Energy, type Horizon, type Task, type TimeWindow } from '@timeblock/core/db/schema';
-import { parseDuration } from '@/lib/csv/duration';
+import { parseDuration } from '@timeblock/core/time/duration';
 import { readTable } from '@/lib/csv/parse';
 import { weekOfMonth } from '@timeblock/core/hierarchy';
 import { periodFor, type Level } from '@timeblock/core/time/periods';

@@ -55,10 +55,6 @@ export function authorizedClient(): OAuth2Client {
   return client;
 }
 
-export function calendarApi() {
-  return google.calendar({ version: 'v3', auth: authorizedClient() });
-}
-
 export type ConnectionState =
   | { status: 'not-configured' }
   | { status: 'not-connected' }

@@ -4,9 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { VIEWS } from '@timeblock/core/calendar/views';
 import { enumOf, str } from '@/lib/forms';
-import { deleteCalendarEvent } from '@/lib/google/calendar';
+import { withEnv } from '@/lib/env';
+import { deleteGoogleEvent } from '@timeblock/core/operations/vacation';
 import { setMark } from '@/lib/repo/event-marks';
-import { getSettings, updateCalendarFilters, updateSettings } from '@/lib/repo/settings';
+import { updateCalendarFilters, updateSettings } from '@/lib/repo/settings';
 
 // The checkboxes post the state they switch to: "1" = shown (ticked), anything
 // else = hidden from the view.
@@ -125,10 +126,7 @@ export async function setNotVacationAction(form: FormData): Promise<void> {
  * through its blocks, never from here.
  */
 export async function deleteEventAction(form: FormData): Promise<void> {
-  const calendarId = str(form, 'calendarId');
-  const settings = await getSettings();
-  if (calendarId === settings.targetCalendarId) throw new Error("TimeBlock's own blocks are deleted as blocks.");
-  await deleteCalendarEvent(calendarId, str(form, 'eventId'));
+  await withEnv(deleteGoogleEvent)(str(form, 'calendarId'), str(form, 'eventId'));
   revalidatePath('/', 'layout');
   redirect(backToCalendar(form));
 }
