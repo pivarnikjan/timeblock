@@ -1,10 +1,10 @@
 'use server';
 
-import { DateTime } from 'luxon';
 import { revalidatePath } from 'next/cache';
 import { num, str } from '@/lib/forms';
 import { redirect } from 'next/navigation';
-import { clearDay, commitDay, syncBlockColors, commitFrom, deleteBlockEverywhere, moveEvent, type CommitRangeResult } from '@/lib/google/sync';
+import { withEnv } from '@/lib/env';
+import { clearDay, commitFrom, type CommitRangeResult } from '@/lib/google/sync';
 import {
   generateDay,
   planCalendar,
@@ -15,11 +15,9 @@ import {
   type RescheduleResult,
   type RescheduleSummary,
 } from '@/lib/planner';
-import * as blockRepo from '@/lib/repo/blocks';
-import { completeRitual } from '@/lib/repo/rituals';
 import { getSettings } from '@/lib/repo/settings';
-import { syncCompletion } from '@/lib/repo/tasks';
 import { syncQuietly } from '@/lib/sync/service';
+import * as ops from '@timeblock/core/operations/plan';
 
 function refresh() {
   revalidatePath('/', 'layout');
@@ -38,9 +36,7 @@ export async function generatePlanAction(form: FormData): Promise<void> {
 export async function commitPlanAction(form: FormData): Promise<void> {
   const date = str(form, 'date');
   await pullFromPhone();
-  await commitDay(date);
-  await syncBlockColors(date);
-  await completeRitual('daily', date);
+  await withEnv(ops.commitDayPlan)(date);
   refresh();
 }
 
@@ -49,10 +45,7 @@ export async function clearPlanAction(form: FormData): Promise<void> {
   refresh();
 }
 
-async function tick(segmentIds: number[], done: boolean) {
-  const taskIds = await blockRepo.setSegmentsDone(segmentIds, done);
-  await syncCompletion(taskIds, await blockRepo.tickedMinutesByTask());
-}
+const tick = withEnv(ops.tick);
 
 /** Ticks one segment on or off. Progress bars move from these ticks. */
 export async function toggleSegmentAction(form: FormData): Promise<void> {
@@ -62,7 +55,7 @@ export async function toggleSegmentAction(form: FormData): Promise<void> {
 
 /** Ticks every segment of a block. */
 export async function completeBlockAction(form: FormData): Promise<void> {
-  await tick(await blockRepo.segmentIdsOfBlock(num(form, 'blockId')), true);
+  await withEnv(ops.completeBlock)(num(form, 'blockId'));
   refresh();
 }
 
@@ -74,8 +67,7 @@ export async function completeBlockAction(form: FormData): Promise<void> {
 export async function reviewDayAction(form: FormData): Promise<void> {
   const date = str(form, 'date');
   const checked = form.getAll('segmentId').map(Number).filter(Number.isFinite);
-  await tick(checked, true);
-  await completeRitual('review', date);
+  await withEnv(ops.reviewDay)(date, checked);
   refresh();
 }
 
@@ -106,7 +98,7 @@ export async function planCalendarAction(_prev: PlanCalendarState, form: FormDat
     if (intent === 'plan' || intent === 'commit' || intent === 'reschedule-preview') await pullFromPhone();
     if (intent === 'reschedule-preview') return { kind: 'reschedule-preview', summary: await previewReschedule() };
     if (intent === 'commit') state = { kind: 'committed', result: await commitFrom(from) };
-    else if (intent === 'discard') state = { kind: 'discarded', blocks: await blockRepo.deleteDraftsFrom(from) };
+    else if (intent === 'discard') state = { kind: 'discarded', blocks: await withEnv(ops.discardDrafts)() };
     else if (intent === 'reschedule') state = { kind: 'rescheduled', result: await reschedule() };
     else state = { kind: 'planned', summary: await planCalendar() };
     refresh();
@@ -123,33 +115,13 @@ export async function planCalendarAction(_prev: PlanCalendarState, form: FormDat
  * event moves with it.
  */
 export async function moveBlockAction(blockId: number, deltaDays: number, deltaMinutes: number): Promise<void> {
-  if (![blockId, deltaDays, deltaMinutes].every(Number.isInteger)) throw new Error('A move needs whole numbers.');
-  if (deltaDays === 0 && deltaMinutes === 0) return;
-
-  const block = await blockRepo.getBlock(blockId);
-  if (!block) throw new Error('That block no longer exists — reload the calendar.');
-  if (block.state === 'done' || blockRepo.isLocked(block)) {
-    throw new Error('This block has ticked-off work, so it stays where it happened.');
-  }
-
-  const { timezone } = await getSettings();
-  const start = DateTime.fromISO(block.startsAt, { zone: timezone }).plus({ days: deltaDays, minutes: deltaMinutes });
-  const length = DateTime.fromISO(block.endsAt).diff(DateTime.fromISO(block.startsAt), 'minutes').minutes;
-  const end = start.plus({ minutes: length });
-  if (start.toISODate() !== end.minus({ milliseconds: 1 }).toISODate()) {
-    throw new Error('A block cannot run past midnight.');
-  }
-
-  const moved = { startsAt: start.toUTC().toISO()!, endsAt: end.toUTC().toISO()! };
-  // Google first: if it refuses, nothing has changed on either side.
-  if (block.state === 'synced') await moveEvent({ ...block, ...moved });
-  await blockRepo.moveBlock(blockId, start.toISODate()!, moved.startsAt, moved.endsAt);
+  await withEnv(ops.moveBlockBy)(blockId, deltaDays, deltaMinutes);
   refresh();
 }
 
 /** Hands a block placed by hand back to the planner: the next plan may move or replace it. */
 export async function unpinBlockAction(form: FormData): Promise<void> {
-  await blockRepo.setPinned(num(form, 'blockId'), false);
+  await withEnv(ops.unpinBlock)(num(form, 'blockId'));
   refresh();
 }
 
@@ -159,8 +131,7 @@ export async function unpinBlockAction(form: FormData): Promise<void> {
  * work is history and stays. Its tasks are planned again next time.
  */
 export async function deleteBlockAction(form: FormData): Promise<void> {
-  const block = await blockRepo.getBlock(num(form, 'blockId'));
-  if (block) await deleteBlockEverywhere(block);
+  await withEnv(ops.deleteBlock)(num(form, 'blockId'));
   refresh();
   const to = String(form.get('returnTo') ?? '');
   redirect(to.startsWith('/calendar') ? to : '/calendar');

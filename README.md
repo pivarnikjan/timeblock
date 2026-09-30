@@ -580,11 +580,14 @@ guards that, since it also runs on the phone.
 | --- | --- |
 | Hierarchy, progress, window inheritance, week-of-month | `packages/core/src/hierarchy.ts` |
 | Free time, packing, day plan | `packages/core/src/scheduler/day.ts`, `packages/core/src/scheduler/plan.ts` |
-| Forecast | `packages/core/src/scheduler/forecast.ts`, `outlook()` in `lib/planner.ts` |
+| Plan calendar, Reschedule, Generate the day, forecast | `packages/core/src/planner.ts` (over `scheduler/forecast.ts`, `scheduler/reschedule.ts`) |
+| Database reads and writes | `packages/core/src/store/` — one file per table group |
+| What the buttons do (tick, commit, move, vacations, quick-add) | `packages/core/src/operations/` |
 | Calendar layout (items, bands, colours) | `packages/core/src/calendar/` — `assemble.ts` builds a view |
 | Phone sync | `packages/core/src/sync/`, `lib/sync/service.ts` |
 | CSV parsing and import | `lib/csv/`, `lib/import/` |
-| Google sync | `lib/google/sync.ts`, `packages/core/src/google/event-content.ts` |
+| Google Calendar | `packages/core/src/google/` — `calendar-api.ts` (the REST client), `reads.ts`, `writes.ts` (commits, colours, vacation copies) |
+| Desktop bindings | `lib/env.ts` builds core's `Env` (database + Google grant); `lib/repo/*`, `lib/planner.ts`, `lib/google/*` bind core to it |
 
 ### Stack
 

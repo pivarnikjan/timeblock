@@ -1,11 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { db } from '@/lib/db/client';
-import { extendYearGoal } from '@/lib/db/year-goals';
+import { withDb } from '@/lib/env';
 import * as repo from '@/lib/repo/horizons';
-import { createTask, updateTask } from '@/lib/repo/tasks';
-import { parseDuration } from '@/lib/csv/duration';
+import { updateTask } from '@/lib/repo/tasks';
+import { addHorizon, editHorizon, quickAddTask } from '@timeblock/core/operations/horizons';
 import { enumOf, num, optNum, optStr, str } from '@/lib/forms';
 
 const LEVELS = ['year', 'quarter', 'month', 'week'] as const;
@@ -30,30 +29,33 @@ const untilYearOf = (form: FormData) => optNum(form, 'untilYear') ?? undefined;
 export async function createHorizonAction(form: FormData): Promise<void> {
   const level = enumOf(form, 'level', LEVELS, 'week');
   const untilYear = level === 'year' ? untilYearOf(form) : undefined;
-  const created = await repo.createHorizon({
-    level,
-    title: str(form, 'title'),
-    description: optStr(form, 'description'),
-    periodStart: str(form, 'periodStart'),
-    periodEnd: untilYear ? `${untilYear}-12-31` : str(form, 'periodEnd'),
-    parentId: parentOf(form),
-    windowId: optNum(form, 'windowId'),
-  });
   // A goal over several years takes in a same-titled goal already set for one of them.
-  if (level === 'year') await extendYearGoal(db(), created.id);
+  await withDb(addHorizon)(
+    {
+      level,
+      title: str(form, 'title'),
+      description: optStr(form, 'description'),
+      periodStart: str(form, 'periodStart'),
+      periodEnd: untilYear ? `${untilYear}-12-31` : str(form, 'periodEnd'),
+      parentId: parentOf(form),
+      windowId: optNum(form, 'windowId'),
+    },
+    untilYear,
+  );
   refresh();
 }
 
 export async function updateHorizonAction(form: FormData): Promise<void> {
-  const id = num(form, 'id');
-  await repo.updateHorizon(id, {
-    title: str(form, 'title'),
-    description: optStr(form, 'description'),
-    parentId: parentOf(form),
-    windowId: optNum(form, 'windowId'),
-  });
-  const untilYear = untilYearOf(form);
-  if (untilYear !== undefined) await extendYearGoal(db(), id, untilYear);
+  await withDb(editHorizon)(
+    num(form, 'id'),
+    {
+      title: str(form, 'title'),
+      description: optStr(form, 'description'),
+      parentId: parentOf(form),
+      windowId: optNum(form, 'windowId'),
+    },
+    untilYearOf(form),
+  );
   refresh();
 }
 
@@ -71,9 +73,7 @@ export async function deleteHorizonAction(form: FormData): Promise<void> {
 
 /** Quick-add from a horizon row: "title + duration", linked straight to it. */
 export async function addTaskToHorizonAction(form: FormData): Promise<void> {
-  const minutes = parseDuration(str(form, 'duration'));
-  if (minutes === null) throw new Error(`Could not read a duration from "${form.get('duration')}"`);
-  await createTask({ title: str(form, 'title'), estimateMin: minutes, horizonId: num(form, 'horizonId') });
+  await withDb(quickAddTask)(num(form, 'horizonId'), str(form, 'title'), str(form, 'duration'));
   refresh();
 }
 
