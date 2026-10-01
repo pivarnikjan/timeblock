@@ -116,6 +116,13 @@ beside the calendar (the grid stays where it is; **×** closes it):
   - **Placeholder** — time held, not taken: *Plan calendar* and *Generate the
     day* may schedule work during it. Drawn hatched.
   - **Show on the calendar** — untick to hide it.
+  - **Category** — see *Event categories* below: by its title words, one you
+    pick, or none.
+  - **Edit time** — a new day, start and end, changed in Google. A repeating
+    event asks: **This event only**, or **This and all following events**
+    (Google's own split: earlier repeats keep their time, and a new series
+    carries on with the new one, keeping the event's category and marks).
+    All-day events are moved in Google Calendar.
   - **Delete from Google Calendar**, after a confirmation. For a repeating event
     only this occurrence is deleted. Read-only calendars (holidays, calendars
     shared with you to view) cannot be deleted from.
@@ -178,6 +185,20 @@ colour (or deleting a window) repaints the events that need it, and **Settings �
 Time windows → Apply window colours in Google Calendar** does it on demand — use
 it once to repaint blocks committed before this rule, which still carry their
 energy colour. Events whose colour you changed in Google are never repainted.
+
+**Event categories.** Events that are not TimeBlock work — a meeting at a
+client, taking a child to kindergarten — can have a category, set up in
+**Settings → Categories**: a name, a colour, and title words. An event whose
+title contains one of the words gets the category (case and accents do not
+matter: *skolky* matches "Po Eminku do škôlky"; the first category in the list
+wins); in the event's panel you can pick one by hand instead, or **No
+category**. Like the other marks, the choice is made on a repeating event's
+series, so every repeat follows. The event is drawn in the category's colour
+here and on the phone, and takes the nearest of Google's eleven colours in
+Google Calendar — saved categories and choices recolour at once, new events
+within the hour (or **Apply category colours in Google Calendar**). A colour
+you change in Google afterwards stays, as with blocks. Categories do not change
+planning: a busy event stays busy.
 
 **Hide what you do not need to see.** Unticked items are removed from the view,
 so a busy month becomes readable:

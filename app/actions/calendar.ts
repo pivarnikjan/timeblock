@@ -6,6 +6,7 @@ import { VIEWS } from '@timeblock/core/calendar/views';
 import { enumOf, str } from '@/lib/forms';
 import { withEnv } from '@/lib/env';
 import { deleteGoogleEvent } from '@timeblock/core/operations/vacation';
+import { chooseEventCategory, editEventTime } from '@timeblock/core/operations/events';
 import { setMark } from '@/lib/repo/event-marks';
 import { updateCalendarFilters, updateSettings } from '@/lib/repo/settings';
 
@@ -129,4 +130,47 @@ export async function deleteEventAction(form: FormData): Promise<void> {
   await withEnv(deleteGoogleEvent)(str(form, 'calendarId'), str(form, 'eventId'));
   revalidatePath('/', 'layout');
   redirect(backToCalendar(form));
+}
+
+// ── Categories and event times ─────────────────────────────────────────────
+
+export type EventEditState =
+  | { kind: 'idle' }
+  | { kind: 'saved'; at: number; warning: string | null }
+  | { kind: 'error'; message: string };
+
+/**
+ * The event panel's Category picker: a category, 'none', or 'rules' (let the
+ * title words decide). On the event's series, so every repeat follows; the
+ * colour follows in Google too.
+ */
+export async function setEventCategoryAction(_prev: EventEditState, form: FormData): Promise<EventEditState> {
+  const raw = str(form, 'choice');
+  const choice = raw === 'none' || raw === 'rules' ? raw : Number(raw);
+  if (typeof choice === 'number' && !Number.isInteger(choice)) return { kind: 'error', message: 'Unknown category.' };
+  const warning = await withEnv(chooseEventCategory)(str(form, 'key'), String(form.get('title') ?? ''), choice);
+  revalidatePath('/', 'layout');
+  return { kind: 'saved', at: Date.now(), warning };
+}
+
+/**
+ * The event panel's Edit time: a new day, start and end for a Google event —
+ * for a repeating one, this occurrence or this and every following one.
+ */
+export async function editEventTimeAction(_prev: EventEditState, form: FormData): Promise<EventEditState> {
+  try {
+    await withEnv(editEventTime)({
+      calendarId: str(form, 'calendarId'),
+      eventId: str(form, 'eventId'),
+      seriesId: str(form, 'seriesId'),
+      date: str(form, 'date'),
+      startTime: str(form, 'startTime'),
+      endTime: str(form, 'endTime'),
+      scope: form.get('scope') === 'following' ? 'following' : 'this',
+    });
+  } catch (error) {
+    return { kind: 'error', message: (error as Error).message };
+  }
+  revalidatePath('/', 'layout');
+  return { kind: 'saved', at: Date.now(), warning: null };
 }

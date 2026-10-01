@@ -26,6 +26,12 @@ export interface GoogleEvent {
   htmlLink?: string | null;
   attendees?: { self?: boolean | null; responseStatus?: string | null }[] | null;
   extendedProperties?: { private?: Record<string, string> | null } | null;
+  /** A recurring series' rules (`RRULE:…`, `EXDATE:…`); on the series itself, not its occurrences. */
+  recurrence?: string[] | null;
+  /** An occurrence of a series: when it was due by the series' rule, before any change to it. */
+  originalStartTime?: GoogleEventTime | null;
+  location?: string | null;
+  visibility?: string | null;
   reminders?: { useDefault?: boolean | null; overrides?: { method?: string | null; minutes?: number | null }[] | null } | null;
 }
 

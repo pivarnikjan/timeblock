@@ -67,14 +67,44 @@ export class FakeCalendar implements CalendarApi {
     return { items, nextPageToken: null };
   }
 
+  async getEvent(calendarId: string, eventId: string) {
+    return { ...this.eventOf(calendarId, eventId) } as GoogleEvent & Record<string, unknown>;
+  }
+
+  /** A series' occurrences as stored here: events whose `recurringEventId` is the series, before `timeMax`. */
+  async listInstances(calendarId: string, seriesId: string, query: { timeMax?: string }) {
+    const before = query.timeMax ? Date.parse(query.timeMax) : Infinity;
+    const items = [...this.eventsOf(calendarId).values()].filter(
+      (e) => e.recurringEventId === seriesId && Date.parse(e.start?.dateTime ?? e.start?.date ?? '') < before,
+    );
+    return { items, nextPageToken: null };
+  }
+
   async insertEvent(calendarId: string, body: EventWrite) {
     const id = this.addEvent(calendarId, { ...body });
     return this.eventOf(calendarId, id);
   }
 
+  /** Like Google's PATCH: fields replace, null clears; the private properties merge key by key, null removing one. */
   async patchEvent(calendarId: string, eventId: string, body: EventWrite) {
-    const merged = { ...this.eventOf(calendarId, eventId), ...body, id: eventId };
+    const current = this.eventOf(calendarId, eventId);
+    const merged: GoogleEvent = { ...current, ...body, id: eventId };
+    if (body.extendedProperties?.private) {
+      const stamps: Record<string, string> = { ...(current.extendedProperties?.private ?? {}) };
+      for (const [k, v] of Object.entries(body.extendedProperties.private)) {
+        if (v === null) delete stamps[k];
+        else stamps[k] = v;
+      }
+      merged.extendedProperties = { private: stamps };
+    }
     this.eventsOf(calendarId).set(eventId, merged);
+    // A series' colour and private properties show on its occurrences, as in Google.
+    if (current.recurrence) {
+      for (const [id, occurrence] of this.eventsOf(calendarId)) {
+        if (occurrence.recurringEventId !== eventId) continue;
+        this.eventsOf(calendarId).set(id, { ...occurrence, colorId: merged.colorId, extendedProperties: merged.extendedProperties });
+      }
+    }
     return merged;
   }
 

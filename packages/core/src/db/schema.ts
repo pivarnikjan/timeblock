@@ -207,7 +207,36 @@ export const eventMarks = sqliteTable('event_marks', {
   placeholder: integer('placeholder', { mode: 'boolean' }).notNull().default(false),
   /** A multi-day event you said is not a vacation, so it is not asked about again. */
   notVacation: integer('not_vacation', { mode: 'boolean' }).notNull().default(false),
+  /**
+   * The event's category, chosen by hand (for a repeating event, every repeat):
+   * a category id, `NO_CATEGORY` (0) for "none" even when a title rule would
+   * match, or null to let the categories' title rules decide.
+   */
+  categoryId: integer('category_id'),
   updatedAt: text('updated_at').notNull().default(now),
+});
+
+/** `event_marks.category_id` for an event deliberately left without a category. */
+export const NO_CATEGORY = 0;
+
+/**
+ * Kinds of events that are not TimeBlock work — meetings at a client,
+ * travelling — each with a colour its events take, on TimeBlock's calendar and
+ * in Google. An event gets one by hand, or by its title containing one of
+ * the category's words.
+ */
+export const eventCategories = sqliteTable('event_categories', {
+  id: integer('id').primaryKey({ autoIncrement: true }).$defaultFn(() => newId()),
+  name: text('name').notNull(),
+  /** `#rrggbb`: the colour on TimeBlock's calendar; Google gets the nearest of its own. */
+  color: text('color').notNull().default('#616161'),
+  /**
+   * Words that put an event in this category when its title contains one, one
+   * per line (or comma separated); case and accents are ignored.
+   */
+  keywords: text('keywords').notNull().default(''),
+  /** Rules are tried in this order; the first category whose word matches wins. */
+  sortOrder: integer('sort_order').notNull().default(0),
 });
 
 /** 'review' records that a planned day was looked back on (ticked off) the next morning. */
@@ -309,6 +338,8 @@ export type NewBlock = typeof blocks.$inferInsert;
 export type BlockSegment = typeof blockSegments.$inferSelect;
 export type Settings = typeof settings.$inferSelect;
 export type EventMark = typeof eventMarks.$inferSelect;
+export type EventCategory = typeof eventCategories.$inferSelect;
+export type NewEventCategory = typeof eventCategories.$inferInsert;
 export type Vacation = typeof vacations.$inferSelect;
 export type RitualKind = (typeof RITUALS)[number];
 export type Energy = (typeof ENERGY)[number];

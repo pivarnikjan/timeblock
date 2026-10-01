@@ -125,4 +125,11 @@ export const MIGRATIONS: readonly Migration[] = [
       "CREATE TABLE `sync_tombstones` (\n\t`tbl` text NOT NULL,\n\t`row_id` text NOT NULL,\n\t`stamp` text NOT NULL,\n\tPRIMARY KEY(`tbl`, `row_id`)\n);",
     ],
   },
+  {
+    name: "0012_event_categories.sql",
+    statements: [
+      "CREATE TABLE `event_categories` (\n\t`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,\n\t`name` text NOT NULL,\n\t`color` text DEFAULT '#616161' NOT NULL,\n\t`keywords` text DEFAULT '' NOT NULL,\n\t`sort_order` integer DEFAULT 0 NOT NULL\n);",
+      "ALTER TABLE `event_marks` ADD `category_id` integer;",
+    ],
+  },
 ];

@@ -4,6 +4,7 @@ import type { Env, GoogleStatus } from '../env';
 import { listCalendars, listRangeEvents, type CalendarEvent, type CalendarSummary } from '../google/reads';
 import { isMissingScopeError, MISSING_SCOPE_HELP } from '../google/scopes';
 import * as blockStore from '../store/blocks';
+import { listCategories } from '../store/categories';
 import { listMarks } from '../store/event-marks';
 import { getCalendarFilters, getSettings } from '../store/settings';
 import { listVacations, vacationsBetween, vacationsBySourceEvent } from '../store/vacations';
@@ -24,6 +25,8 @@ export interface CalendarData extends CalendarLayout {
   googleStatus: GoogleStatus;
   problem: string | null;
   settings: Settings;
+  /** Event categories, in rule order, for the event panel's picker. */
+  categories: { id: number; name: string; color: string }[];
 }
 
 /** Google's side of a calendar view — or nothing, with the reason, when Google cannot be read. */
@@ -71,13 +74,14 @@ export async function loadCalendarView(env: Env, view: CalendarView, anchor: str
 
   const rangeStart = DateTime.fromISO(first, { zone }).toUTC().toISO()!;
   const rangeEnd = DateTime.fromISO(afterLast, { zone }).toUTC().toISO()!;
-  const [{ events, calendars, problem }, blocks, marks, away, upcoming, converted] = await Promise.all([
+  const [{ events, calendars, problem }, blocks, marks, away, upcoming, converted, categories] = await Promise.all([
     options.google ? options.google(first, afterLast, zone) : loadEvents(env, first, afterLast, zone),
     blockStore.listForRange(env.db, first, last),
     listMarks(env.db),
     vacationsBetween(env.db, rangeStart, rangeEnd),
     listVacations(env.db, nowIn(zone).toUTC().toISO()!),
     vacationsBySourceEvent(env.db),
+    listCategories(env.db),
   ]);
 
   const layout = assembleCalendar({
@@ -93,6 +97,7 @@ export async function loadCalendarView(env: Env, view: CalendarView, anchor: str
     marks,
     vacations: away,
     converted,
+    categories,
   });
 
   return {
@@ -106,6 +111,7 @@ export async function loadCalendarView(env: Env, view: CalendarView, anchor: str
     googleStatus: env.google.status(),
     problem,
     settings,
+    categories: categories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
   };
 }
 

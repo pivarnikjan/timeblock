@@ -28,6 +28,14 @@ export interface CalendarApi {
   insertCalendar(body: { summary: string; timeZone: string }): Promise<{ id: string }>;
   /** One page of expanded events (recurring events as single occurrences). */
   listEvents(calendarId: string, query: EventListQuery): Promise<EventListPage>;
+  /**
+   * One event as Google stores it — a series with its `recurrence`, an
+   * occurrence with its `originalStartTime` — including fields TimeBlock does
+   * not model (attendees, conference links…), so a copy can carry them over.
+   */
+  getEvent(calendarId: string, eventId: string): Promise<GoogleEvent & Record<string, unknown>>;
+  /** One page of a series' occurrences, up to `timeMax` when given. */
+  listInstances(calendarId: string, seriesId: string, query: { timeMax?: string; pageToken?: string }): Promise<EventListPage>;
   insertEvent(calendarId: string, body: EventWrite): Promise<GoogleEvent>;
   patchEvent(calendarId: string, eventId: string, body: EventWrite): Promise<GoogleEvent>;
   updateEvent(calendarId: string, eventId: string, body: EventWrite): Promise<GoogleEvent>;
@@ -129,6 +137,13 @@ export function googleCalendar(accessToken: (renew?: boolean) => Promise<string>
           maxResults: '2500',
           pageToken: q.pageToken,
         })}`,
+      );
+      return { items: page.items ?? [], nextPageToken: page.nextPageToken ?? null };
+    },
+    getEvent: (calendarId, eventId) => json<GoogleEvent & Record<string, unknown>>(eventPath(calendarId, eventId)),
+    async listInstances(calendarId, seriesId, q) {
+      const page = await json<{ items?: GoogleEvent[]; nextPageToken?: string }>(
+        `${eventPath(calendarId, seriesId)}/instances?${query({ timeMax: q.timeMax, maxResults: '2500', pageToken: q.pageToken })}`,
       );
       return { items: page.items ?? [], nextPageToken: page.nextPageToken ?? null };
     },

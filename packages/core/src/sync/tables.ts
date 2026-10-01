@@ -44,6 +44,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   },
   { table: 'blocks', key: 'id', exportWhere: SHARED_BLOCK, tombstoneWhen: `OLD.${SHARED_BLOCK}` },
   { table: 'vacations', key: 'id' },
+  { table: 'event_categories', key: 'id' },
   { table: 'event_marks', key: 'key' },
   { table: 'ritual_log', key: 'id', unique: ['kind', 'for_period'] },
 ];

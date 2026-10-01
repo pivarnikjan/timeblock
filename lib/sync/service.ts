@@ -12,9 +12,12 @@ import {
   type SyncReport,
 } from '@timeblock/core/sync/run';
 import { readMeta, retentionCutoff, type SyncMetaRow } from '@timeblock/core/sync/state';
-import { sqlite } from '@/lib/db/client';
+import { db, sqlite } from '@/lib/db/client';
 import { nodeDriver } from '@/lib/db/driver';
 import { authorizedClient, connectionState } from '@/lib/google/client';
+import { withEnv } from '@/lib/env';
+import { syncCategoryColors } from '@timeblock/core/google/category-colors';
+import { listCategories } from '@timeblock/core/store/categories';
 import { readCredentials } from '@/lib/google/credentials';
 
 /**
@@ -67,6 +70,8 @@ function describe(error: unknown): string {
 const state = globalThis as unknown as {
   __timeblockSyncRound?: Promise<SyncReport> | null;
   __timeblockAutoSync?: NodeJS.Timeout;
+  /** When events in Google were last given their category's colour (ms). */
+  __timeblockCategoriesAt?: number;
   /** The clock after the last round: when it moves, something changed here. */
   __timeblockSyncedClock?: number;
 };
@@ -144,9 +149,26 @@ const CHECK_EVERY_MS = 60 * 1000;
  * While the server runs: a change made here goes up within a minute, and the
  * phone's changes are looked for every five. Started from instrumentation.ts.
  */
+/** Events added or renamed in Google take their category's colour there within this long. */
+const RECOLOUR_EVERY_MS = 60 * 60_000;
+
+/** Gives Google events their category's colour now and then (see `syncCategoryColors`); failures wait for the next round. */
+async function recolourQuietly(): Promise<void> {
+  if (Date.now() - (state.__timeblockCategoriesAt ?? 0) < RECOLOUR_EVERY_MS) return;
+  state.__timeblockCategoriesAt = Date.now();
+  try {
+    // Nothing to colour without categories (deleting the last one recolours on its own).
+    if ((await listCategories(db())).length === 0) return;
+    await withEnv(syncCategoryColors)();
+  } catch {
+    // Offline or refused: the next round tries again; the calendar shows the colours regardless.
+  }
+}
+
 export function startAutoSync(): void {
   if (state.__timeblockAutoSync) return;
   const tick = async () => {
+    await recolourQuietly();
     if (syncAvailability().status !== 'ready') return;
     const { clock, lastSyncAt } = readMeta(driver());
     const due = !lastSyncAt || Date.now() - Date.parse(lastSyncAt) >= PULL_EVERY_MS - 5_000;
