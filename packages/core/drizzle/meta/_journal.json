@@ -85,6 +85,13 @@
       "when": 1790710132885,
       "tag": "0011_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790840744252,
+      "tag": "0012_event_categories",
+      "breakpoints": true
     }
   ]
 }

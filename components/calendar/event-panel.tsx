@@ -8,6 +8,7 @@ import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
 import type { Conflicts } from '@/lib/calendar/vacation-conflicts';
 import { calendarHref } from '@timeblock/core/calendar/views';
 import { formInputs } from '@timeblock/core/vacation';
+import { EventCategoryForm, EventTimeForm } from './event-edit';
 import { ToggleForm } from './toggle';
 import { VacationCleanup } from './vacation-cleanup';
 import { VacationForm } from './vacation-form';
@@ -90,6 +91,35 @@ function EventDetails({ data, item, close }: { data: CalendarData; item: Calenda
       )}
 
       {item.multiDay && <VacationQuestion data={data} item={item} />}
+
+      <div className="border-t border-border pt-3">
+        <EventCategoryForm
+          eventKey={key}
+          title={item.title}
+          categories={data.categories}
+          current={item.category}
+          source={item.categorySource}
+          recurring={item.recurring}
+        />
+      </div>
+
+      {item.writable && !item.allDay && (
+        <details className="border-t border-border pt-3">
+          <summary className="cursor-pointer text-xs font-medium text-muted hover:text-foreground">Edit time</summary>
+          <div className="pt-3">
+            <EventTimeForm
+              key={`${item.id}|${item.start.toISO()}|${item.end.toISO()}`}
+              calendarId={item.calendarId!}
+              eventId={item.eventId!}
+              seriesId={item.seriesId!}
+              date={item.start.toISODate()!}
+              start={item.start.toFormat('HH:mm')}
+              end={item.end.toFormat('HH:mm')}
+              recurring={item.recurring}
+            />
+          </div>
+        </details>
+      )}
 
       <div className="space-y-3 border-t border-border pt-3">
         <Mark

@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-10-01 | v0.14 | [E23 · Event categories](#e23--event-categories) | TB-088 – TB-089 | Done, desktop and phone |
 | 2026-09-30 | v0.13 | [E22 · The whole planner on the phone](#e22--the-whole-planner-on-the-phone) | TB-087 | In progress — shared planner done; the phone screens follow in timeblock-mobile |
 | 2026-09-29 | v0.12 | [E21 · Phone sync](#e21--phone-sync) | TB-082 – TB-086 | Desktop done; the Android app follows in timeblock-mobile |
 | 2026-09-29 | v0.11 | [E20 · Goals over several years](#e20--goals-over-several-years) | TB-079 – TB-080, TB-081 (fix) | Done |
@@ -44,6 +45,67 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-10-01 · v0.14 — Event categories
+
+**Theme.** The rest of the calendar — client meetings, the kindergarten run —
+readable at a glance, and movable without leaving TimeBlock.
+
+**Upgrade notes.** Migration `0012_event_categories` adds the
+`event_categories` table (synced with the phone) and a `category_id` on event
+marks. Nothing is categorised until a category is created.
+
+## E23 · Event categories
+
+> The kindergarten run is always grey, wherever I look at it, and moving it to
+> the new time from next week on takes one change.
+
+### TB-088 · Categories colour the events in them
+*As a planner, I want events that are not TimeBlock work grouped into
+categories with their own colour, so that a busy week reads at a glance.*
+
+Acceptance criteria
+- [x] **Settings → Categories**: name, colour and title words per category;
+      add, save, delete. Synced with the phone, which offers the same.
+- [x] An event takes the first category (in list order) one of whose words
+      its title contains — case and accents ignored — unless one was picked by
+      hand in its panel, or **No category**. The choice is made on a repeating
+      event's series, so every repeat follows.
+- [x] The event is drawn in the category's colour on both devices; in Google it
+      takes the nearest of Google's colours, on the series, stamped like a
+      block's — so a colour changed in Google afterwards is kept. Leaving a
+      category takes that colour back off.
+- [x] Saving a category or a choice recolours in Google at once; the desktop
+      recolours new events within the hour; **Apply category colours in Google
+      Calendar** does it on demand. A Google refusal leaves the choice saved
+      and says so.
+
+### TB-089 · Change an event's time, this one or this and following
+*As a planner, I want to move an event — or a repeating event from a date
+on — without opening Google Calendar.*
+
+Acceptance criteria
+- [x] **Edit time** in a Google event's panel (calendars the account can edit;
+      not TimeBlock's own, not all-day events): day, from, until — an end at or
+      before the start ends the next day.
+- [x] A repeating event asks **This event only** or **This and all following
+      events**. The latter splits the series as Google does: it ends just
+      before this repeat (a COUNT becomes an UNTIL, exception dates go to their
+      side), and a copy carries on with the new time and the same details —
+      and keeps TimeBlock's category, marks and hidden state. From its first
+      repeat, the whole series moves instead.
+- [x] The copy is created before the series is shortened; if Google refuses
+      the second step, the copy is removed again and nothing has changed.
+
+Where to look: `packages/core/src/calendar/categories.ts` (+ test),
+`store/categories.ts`, `store/event-marks.ts` (`setEventCategory`,
+`copyMarks`), `google/category-colors.ts`, `google/recurrence.ts` (+ test),
+`google/event-time.ts`, `operations/events.ts`, `calendar/assemble.ts` ·
+`app/actions/categories.ts`, `app/actions/calendar.ts` ·
+`components/categories-card.tsx`, `components/calendar/event-edit.tsx` ·
+`lib/sync/service.ts` (hourly recolour) · `lib/event-categories.test.ts`.
 
 ---
 

@@ -1,11 +1,12 @@
 import { DateTime } from 'luxon';
 import { isLocked, type BlockWithSegments } from '../blocks';
-import type { EventMark, Settings, TimeWindow, Vacation } from '../db/schema';
+import type { EventCategory, EventMark, Settings, TimeWindow, Vacation } from '../db/schema';
 import type { CalendarEvent, CalendarSummary } from '../google/events';
 import { toSpec } from '../scheduler/day';
 import { closedWindows, formInputs, vacationClosures } from '../vacation';
 import { windowBands, windowLegend, type WindowBand, type WindowLegend } from './bands';
-import { blockColor, eventColor, textOn, windowColors } from './colors';
+import { categorizedEventColor, categoryOf } from './categories';
+import { blockColor, textOn, windowColors } from './colors';
 import { eventKey, isHidden, occurrenceKey, type CalendarFilters } from './filters';
 import { isMultiDay } from './multi-day';
 import { visibleHours, type CalendarRange, type CalendarView } from './views';
@@ -38,6 +39,8 @@ export interface CalendarItem {
   pinned: boolean;
   /** Google's event id (events only), for deleting it. */
   eventId: string | null;
+  /** Events only: the repeating series it belongs to; its own id when it does not repeat. */
+  seriesId: string | null;
   /** The calendar it is in, as Google names it (events only). */
   calendarName: string | null;
   /** Its calendar can be edited, so the event can be deleted here. */
@@ -57,6 +60,9 @@ export interface CalendarItem {
   notVacation: boolean;
   /** Events only: counts as busy in Google (not free, not declined). */
   busy: boolean;
+  /** Events only: its category, and whether it was chosen by hand or came from a title rule. */
+  category: { id: number; name: string; color: string } | null;
+  categorySource: 'chosen' | 'rule' | null;
   /** Vacations only: the exact span, the windows it closes, and its id. */
   vacation: {
     id: number;
@@ -96,6 +102,8 @@ export interface CalendarInput {
   vacations: Vacation[];
   /** Vacations made from a Google event, by that occurrence's key. */
   converted: Map<string, Vacation>;
+  /** Event categories; their colours colour the events in them. */
+  categories?: EventCategory[];
 }
 
 /** A calendar view ready to draw — the same on the desktop and the phone. */
@@ -142,7 +150,8 @@ export function assembleCalendar(input: CalendarInput): CalendarLayout {
     const important = mark?.important ?? false;
     if (isHidden({ calendarId: e.calendarId, key: hideKey, isBlock: false, multiDay, important }, filters, view)) continue;
     const calendar = calendarById.get(e.calendarId);
-    const color = eventColor(e.colorId, calendar?.background);
+    const { category, source } = categoryOf(e.title, mark, input.categories ?? []);
+    const color = categorizedEventColor(e, category, calendar?.background);
     items.push({
       id: `${e.calendarId}:${e.id}`,
       kind: 'event',
@@ -162,6 +171,7 @@ export function assembleCalendar(input: CalendarInput): CalendarLayout {
       movable: false,
       pinned: false,
       eventId: e.id,
+      seriesId: e.seriesId,
       calendarName: calendar?.summary ?? null,
       writable: calendar?.writable ?? false,
       recurring: e.recurring,
@@ -172,6 +182,8 @@ export function assembleCalendar(input: CalendarInput): CalendarLayout {
       madeVacationId: converted.get(occurrenceKey(e))?.id ?? null,
       notVacation: mark?.notVacation ?? false,
       busy: e.busy,
+      category: category && { id: category.id, name: category.name, color: category.color },
+      categorySource: source,
       blockState: null,
       segments: [],
       vacation: null,
@@ -206,6 +218,7 @@ export function assembleCalendar(input: CalendarInput): CalendarLayout {
       movable: b.state !== 'done' && !isLocked(b),
       pinned: b.pinned,
       eventId: null,
+      seriesId: null,
       calendarName: null,
       writable: false,
       recurring: false,
@@ -216,6 +229,8 @@ export function assembleCalendar(input: CalendarInput): CalendarLayout {
       madeVacationId: null,
       notVacation: false,
       busy: false,
+      category: null,
+      categorySource: null,
       blockState: b.state === 'cancelled' ? 'done' : b.state,
       segments: b.segments.map((s) => ({ id: s.id, title: s.task.title, minutes: s.minutes, done: s.doneAt !== null })),
       vacation: null,
@@ -288,6 +303,7 @@ const VACATION_BASE = {
   movable: false,
   pinned: false,
   eventId: null,
+  seriesId: null,
   calendarName: null,
   writable: false,
   recurring: false,
@@ -298,6 +314,8 @@ const VACATION_BASE = {
   madeVacationId: null,
   notVacation: false,
   busy: false,
+  category: null,
+  categorySource: null,
   blockState: null,
   segments: [],
 } as const satisfies Partial<CalendarItem>;

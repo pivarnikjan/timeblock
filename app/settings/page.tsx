@@ -22,6 +22,9 @@ import { redirectUri } from '@/lib/google/credentials';
 import { getSettings } from '@/lib/repo/settings';
 import { Button, Card, Field, Input, PageHeader } from '@/components/ui';
 import { PhoneSyncCard } from '@/components/phone-sync-card';
+import { CategoriesCard } from '@/components/categories-card';
+import { listCategories } from '@timeblock/core/store/categories';
+import { db } from '@/lib/db/client';
 import { syncStatus } from '@/lib/sync/service';
 
 export const dynamic = 'force-dynamic';
@@ -72,7 +75,7 @@ function errorMessage(error: string, reason: string | null): string {
 
 export default async function SettingsPage({ searchParams }: PageProps<'/settings'>) {
   const params = await searchParams;
-  const [settings, windows] = await Promise.all([getSettings(), listWindows()]);
+  const [settings, windows, categories] = await Promise.all([getSettings(), listWindows(), listCategories(db())]);
   const connection = connectionState();
   const calendars = connection.status === 'connected' ? await readCalendars(settings.targetCalendarId) : null;
   const colors = windowColors(windows);
@@ -323,6 +326,11 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
           </form>
         )}
       </Card>
+
+      <CategoriesCard
+        categories={categories.map((c) => ({ id: c.id, name: c.name, color: c.color, keywords: c.keywords }))}
+        googleConnected={connection.status === 'connected'}
+      />
 
       <Card>
         <h2 className="text-sm font-medium">Import tasks from CSV</h2>
