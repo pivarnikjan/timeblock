@@ -132,4 +132,12 @@ export const MIGRATIONS: readonly Migration[] = [
       "ALTER TABLE `event_marks` ADD `category_id` integer;",
     ],
   },
+  {
+    name: "0013_task_reschedules.sql",
+    statements: [
+      "CREATE TABLE `task_reschedules` (\n\t`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,\n\t`task_id` integer NOT NULL,\n\t`block_id` integer NOT NULL,\n\t`from_starts_at` text NOT NULL,\n\t`to_starts_at` text,\n\t`minutes` integer NOT NULL,\n\t`reason` text NOT NULL,\n\t`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')) NOT NULL\n);",
+      "CREATE UNIQUE INDEX `task_reschedules_slip_idx` ON `task_reschedules` (`task_id`,`block_id`,`from_starts_at`);",
+      "CREATE INDEX `task_reschedules_created_idx` ON `task_reschedules` (`created_at`);",
+    ],
+  },
 ];

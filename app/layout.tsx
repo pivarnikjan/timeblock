@@ -13,8 +13,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         <header className="border-b border-border bg-surface">
-          <nav className="mx-auto flex max-w-6xl items-center gap-1 px-4 py-3">
-            <Link href="/calendar" className="mr-4 font-semibold tracking-tight">
+          <nav className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto whitespace-nowrap px-4 py-3">
+            <Link href="/calendar" className="mr-4 shrink-0 font-semibold tracking-tight">
               Time<span className="text-accent">Block</span>
             </Link>
             <MainNav />

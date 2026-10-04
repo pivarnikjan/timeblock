@@ -47,6 +47,8 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   { table: 'event_categories', key: 'id' },
   { table: 'event_marks', key: 'key' },
   { table: 'ritual_log', key: 'id', unique: ['kind', 'for_period'] },
+  // Append-only; a slip recorded on both devices (the same block, the same time) is kept once.
+  { table: 'task_reschedules', key: 'id', unique: ['task_id', 'block_id', 'from_starts_at'] },
 ];
 
 export const SYNC_TABLE_NAMES = SYNC_TABLES.map((t) => t.table);

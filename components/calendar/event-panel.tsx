@@ -10,6 +10,8 @@ import { calendarHref } from '@timeblock/core/calendar/views';
 import { formInputs } from '@timeblock/core/vacation';
 import { editTarget } from './edit-target';
 import { EventCategoryForm } from './event-edit';
+import { MissedButton } from './missed-button';
+import { rescheduleCounts } from '@/lib/repo/reschedules';
 import { TimeEditor } from './time-editor';
 import { ToggleForm } from './toggle';
 import { VacationCleanup } from './vacation-cleanup';
@@ -42,7 +44,7 @@ export function EventPanel({ data, item, conflicts = null }: { data: CalendarDat
       ) : item.kind === 'vacation' ? (
         <VacationDetails data={data} item={item} close={close} conflicts={conflicts} />
       ) : (
-        <BlockDetails item={item} close={close} />
+        <BlockDetails data={data} item={item} close={close} />
       )}
     </aside>
   );
@@ -237,8 +239,10 @@ function Mark({ label, help, checked, fields }: { label: string; help: string; c
   );
 }
 
-function BlockDetails({ item, close }: { item: CalendarItem; close: string }) {
+async function BlockDetails({ data, item, close }: { data: CalendarData; item: CalendarItem; close: string }) {
   const state = item.blockState === 'draft' ? 'Draft — not in Google yet' : item.blockState === 'done' ? 'Kept as history' : 'In Google Calendar';
+  const counts = await rescheduleCounts([...new Set(item.segments.map((s) => s.taskId))]);
+  const missable = item.blockId !== null && item.blockState !== 'done' && item.segments.some((s) => !s.done);
   return (
     <>
       <p className="text-xs text-muted">
@@ -252,10 +256,20 @@ function BlockDetails({ item, close }: { item: CalendarItem; close: string }) {
               {s.done ? '✓' : ''}
             </span>
             <span className={`min-w-0 flex-1 ${s.done ? 'text-muted line-through' : ''}`}>{s.title}</span>
+            {(counts.get(s.taskId) ?? 0) > 0 && (
+              <span className="text-xs tabular-nums text-amber-600" title="Times this task was rescheduled — see the Dashboard">
+                ↻{counts.get(s.taskId)}
+              </span>
+            )}
             <span className="text-xs tabular-nums text-muted">{formatMinutes(s.minutes)}</span>
           </li>
         ))}
       </ul>
+      {missable && (
+        <div className="border-t border-border pt-3">
+          <MissedButton blockId={item.blockId!} zone={data.zone} view={data.range.view} />
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3 text-xs">
         <Link href={calendarHref('day', item.planDate!)} className="text-accent underline underline-offset-2">
           Tick off in the day →

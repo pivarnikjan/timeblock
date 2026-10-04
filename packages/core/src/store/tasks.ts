@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { statusAfterTicks } from '../blocks';
-import { blocks, blockSegments, tasks, type NewTask, type Task } from '../db/schema';
+import { blocks, blockSegments, taskReschedules, tasks, type NewTask, type Task } from '../db/schema';
 import type { TimeblockDb } from '../env';
 
 export type TaskStatus = Task['status'];
@@ -65,6 +65,7 @@ export async function deleteTask(db: TimeblockDb, id: number): Promise<void> {
         sql`not exists (select 1 from ${blockSegments} where ${blockSegments.blockId} = ${blocks.id})`,
       ),
     );
+  await db.delete(taskReschedules).where(eq(taskReschedules.taskId, id));
   await db.delete(tasks).where(eq(tasks.id, id));
 }
 

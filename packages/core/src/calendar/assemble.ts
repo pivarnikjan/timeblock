@@ -82,7 +82,7 @@ export interface CalendarItem {
   } | null;
   /** Blocks only: draft / synced / done, and the tasks inside. */
   blockState: 'draft' | 'synced' | 'done' | null;
-  segments: { id: number; title: string; minutes: number; done: boolean }[];
+  segments: { id: number; taskId: number; title: string; minutes: number; done: boolean }[];
 }
 
 /** Everything a calendar view is drawn from, already read from storage and Google. */
@@ -232,7 +232,7 @@ export function assembleCalendar(input: CalendarInput): CalendarLayout {
       category: null,
       categorySource: null,
       blockState: b.state === 'cancelled' ? 'done' : b.state,
-      segments: b.segments.map((s) => ({ id: s.id, title: s.task.title, minutes: s.minutes, done: s.doneAt !== null })),
+      segments: b.segments.map((s) => ({ id: s.id, taskId: s.taskId, title: s.task.title, minutes: s.minutes, done: s.doneAt !== null })),
       vacation: null,
     });
   }

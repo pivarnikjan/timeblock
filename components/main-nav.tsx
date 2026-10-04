@@ -7,6 +7,7 @@ const NAV = [
   { href: '/calendar', label: 'Calendar', match: ['/calendar', '/today'] },
   { href: '/planning', label: 'Planning', match: ['/planning', '/week', '/month', '/year'] },
   { href: '/tasks', label: 'Tasks', match: ['/tasks'] },
+  { href: '/dashboard', label: 'Dashboard', match: ['/dashboard'] },
   { href: '/settings', label: 'Settings', match: ['/settings'] },
 ] as const;
 

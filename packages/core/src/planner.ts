@@ -3,7 +3,7 @@ import type { Horizon, Settings, Task, TimeWindow } from './db/schema';
 import type { Env, GoogleStatus } from './env';
 import { MISSING_SCOPE_HELP, isMissingScopeError } from './google/scopes';
 import { busySpans, listDayEvents, listRangeEvents, type CalendarEvent } from './google/reads';
-import { commitBlocks, moveEvent, removeBlockEvents, syncBlockColors } from './google/writes';
+import { commitBlocks, moveEvent, removeBlockEvents, retimeEvent, syncBlockColors } from './google/writes';
 import {
   ancestry,
   availability,
@@ -20,6 +20,7 @@ import {
 } from './hierarchy';
 import * as blockStore from './store/blocks';
 import { freeEventKeys } from './store/event-marks';
+import { recordSlips, rescheduleCounts } from './store/reschedules';
 import { listAllHorizons } from './store/horizons';
 import { getSettings } from './store/settings';
 import { listAllTasks } from './store/tasks';
@@ -881,5 +882,166 @@ export async function loadDay(env: Env, date?: string, calendar?: CalendarLoad):
     candidates,
     backlog: ctx.tasks.filter((t) => (t.status === 'backlog' || t.status === 'active') && !candidateIds.has(t.id)),
     problem: day.problem,
+  };
+}
+
+// ── Missed blocks ───────────────────────────────────────────────────────────
+
+/** What "Didn't get to it" did. */
+export interface MissedResult {
+  /** The block the work is in now, and when. */
+  to: { blockId: number; startsAt: string; endsAt: string };
+  /** Later blocks of the same course moved after it, so the course stays in order. */
+  shifted: number;
+  /** Each of its tasks, and how many times it has been rescheduled now. */
+  counts: { taskId: number; title: string; count: number }[];
+  /** Google Calendar could not be read: meetings were not avoided. */
+  problem: string | null;
+}
+
+/**
+ * "Didn't get to it": the block's unticked work goes to the first free slot in
+ * its window from now on (after the block's own end, for one missed ahead of
+ * time) — around meetings, vacations and every other block, moving nothing
+ * else — and is pinned there. Ticked work stays where it was
+ * done (the rest then gets a block of its own). A committed block's Google
+ * event moves with it, Google first.
+ *
+ * Each task's slip is recorded (see `taskReschedules`). A course stays in
+ * order: later blocks of the same course that would now come first move after
+ * it, each to the next free slot (a session to a later day). Those moves are
+ * not slips. When no slot is free within the planning horizon, nothing changes.
+ */
+export async function rescheduleMissed(env: Env, blockId: number): Promise<MissedResult> {
+  const ctx = await loadContext(env);
+  const { settings, shape } = ctx;
+  const zone = settings.timezone;
+  const block = await blockStore.getBlock(env.db, blockId);
+  if (!block) throw new Error('That block no longer exists — reload the calendar.');
+  if (block.state === 'done' || block.state === 'cancelled') throw new Error('This block is kept as history.');
+  const open = block.segments.filter((s) => s.doneAt === null);
+  if (open.length === 0) throw new Error('Everything in this block is ticked off.');
+
+  const from = today(settings);
+  const until = DateTime.fromISO(from, { zone }).plus({ days: PLAN_CALENDAR_DAYS }).toISODate()!;
+  const [calendar, blocks] = await Promise.all([loadRangeBusy(env, from, until, settings), blockStore.listFrom(env.db, from)]);
+  const taskById = new Map(ctx.tasks.map((t) => [t.id, t]));
+
+  // Later work of the same course, in the order it is planned.
+  const position = (taskId: number) => ctx.sequences.get(taskId);
+  const keys = new Map<string, number>();
+  for (const s of open) {
+    const p = position(s.taskId);
+    if (p) keys.set(p.key, Math.max(keys.get(p.key) ?? -1, p.index));
+  }
+  const laterInCourse = (b: blockStore.BlockWithSegments) =>
+    b.id !== block.id &&
+    !blockStore.isLocked(b) &&
+    b.state !== 'done' &&
+    b.segments.some((s) => {
+      const p = position(s.taskId);
+      return p !== undefined && keys.has(p.key) && p.index > keys.get(p.key)!;
+    });
+  const course = blocks.filter(laterInCourse).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+
+  // Every block but the ones that may move holds its time.
+  const moving = new Set([block.id, ...course.map((b) => b.id)]);
+  const busyByDate = new Map(calendar.busy);
+  const addBusy = (date: string, span: BusySpan) => busyByDate.set(date, [...(busyByDate.get(date) ?? []), span]);
+  addBusy(from, beforeNow(settings));
+  for (const b of blocks) if (!moving.has(b.id) && b.state !== 'cancelled') addBusy(b.date, { start: b.startsAt, end: b.endsAt });
+
+  /** The first free slot of `length` minutes in the window, starting no earlier than `after`. */
+  const slotFor = (windowId: number | null, length: number, after: DateTime): Interval | null => {
+    const spec = ctx.specs.find((s) => s.id === windowId) ?? anytimeWindow(shape);
+    for (let day = after.setZone(zone).startOf('day'); day.toISODate()! < until; day = day.plus({ days: 1 })) {
+      const date = day.toISODate()!;
+      if (!windowOpensOn(spec, date, zone)) continue;
+      const free = openSlots(
+        freeSlots(date, shape, busyByDate.get(date) ?? [], windowInterval(date, spec, zone)),
+        closuresFor(ctx.closures, spec.id, zone),
+        shape,
+      );
+      for (const slot of free) {
+        const earliest = DateTime.max(slot.start, after);
+        const start = earliest.plus({ minutes: (5 - (earliest.minute % 5)) % 5 }).startOf('minute');
+        if (slot.end.diff(start, 'minutes').minutes >= length) return { start, end: start.plus({ minutes: length }) };
+      }
+    }
+    return null;
+  };
+  const lengthOf = (b: blockStore.BlockWithSegments) => DateTime.fromISO(b.endsAt).diff(DateTime.fromISO(b.startsAt), 'minutes').minutes;
+  const isSession = (b: blockStore.BlockWithSegments) => b.segments.some((s) => taskById.get(s.taskId)?.sequential);
+
+  // The missed work: the whole block, or — with some of it ticked — just the rest.
+  const split = open.length < block.segments.length;
+  const openMinutes = open.reduce((n, s) => n + s.minutes, 0);
+  const length = split ? Math.max(shape.minBlockMin, Math.ceil(openMinutes / 5) * 5) : lengthOf(block);
+  // Never back into its own time or before it: a block missed ahead of time goes after it.
+  const target = slotFor(block.windowId, length, DateTime.max(nowIn(zone), DateTime.fromISO(block.endsAt)));
+  if (!target) throw new Error('No free slot in its window within the next three months — nothing was changed.');
+  addBusy(target.start.setZone(zone).toISODate()!, { start: target.start.toUTC().toISO()!, end: target.end.toUTC().toISO()! });
+
+  // Then the course, each after the one before it.
+  const moves: { block: blockStore.BlockWithSegments; at: Interval }[] = [];
+  let previous = { at: target, session: isSession(block) };
+  for (const b of course) {
+    const after = previous.session ? previous.at.end.setZone(zone).plus({ days: 1 }).startOf('day') : previous.at.end;
+    if (DateTime.fromISO(b.startsAt) >= after) {
+      previous = { at: { start: DateTime.fromISO(b.startsAt), end: DateTime.fromISO(b.endsAt) }, session: isSession(b) };
+      continue;
+    }
+    const at = slotFor(b.windowId, lengthOf(b), after);
+    if (!at) throw new Error('The rest of its course would not fit in the next three months — nothing was changed.');
+    addBusy(at.start.setZone(zone).toISODate()!, { start: at.start.toUTC().toISO()!, end: at.end.toUTC().toISO()! });
+    moves.push({ block: b, at });
+    previous = { at, session: isSession(b) };
+  }
+
+  const placed = (i: Interval) => ({ date: i.start.setZone(zone).toISODate()!, startsAt: i.start.toUTC().toISO()!, endsAt: i.end.toUTC().toISO()! });
+  const moveWhole = async (b: blockStore.BlockWithSegments, at: Interval) => {
+    const to = placed(at);
+    if (b.state === 'synced') await moveEvent(env, { ...b, ...to });
+    await blockStore.moveBlock(env.db, b.id, to.date, to.startsAt, to.endsAt);
+  };
+
+  const at = placed(target);
+  let movedTo = block.id;
+  if (split) {
+    movedTo = await blockStore.insertDraft(env.db, at.date, {
+      startsAt: at.startsAt,
+      endsAt: at.endsAt,
+      windowId: block.windowId,
+      segments: open.map((s) => ({ taskId: s.taskId, minutes: s.minutes })),
+    });
+    await blockStore.setPinned(env.db, movedTo, true);
+    await blockStore.removeSegments(env.db, open.map((s) => s.id));
+    if (block.state === 'synced') {
+      // Its Google event now lists only the work done there; the rest gets an event of its own.
+      await retimeEvent(env, { ...block, segments: block.segments.filter((s) => s.doneAt !== null) });
+      await commitBlocks(env, [movedTo]);
+    }
+  } else {
+    await moveWhole(block, target);
+  }
+  for (const m of moves) await moveWhole(m.block, m.at);
+
+  await recordSlips(
+    env.db,
+    open.map((s) => ({
+      taskId: s.taskId,
+      blockId: block.id,
+      fromStartsAt: block.startsAt,
+      toStartsAt: at.startsAt,
+      minutes: s.minutes,
+      reason: 'missed' as const,
+    })),
+  );
+  const counts = await rescheduleCounts(env.db, [...new Set(open.map((s) => s.taskId))]);
+  return {
+    to: { blockId: movedTo, startsAt: at.startsAt, endsAt: at.endsAt },
+    shifted: moves.length,
+    counts: [...counts].map(([taskId, count]) => ({ taskId, title: taskById.get(taskId)?.title ?? `#${taskId}`, count })),
+    problem: calendar.problem,
   };
 }
