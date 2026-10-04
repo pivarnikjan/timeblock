@@ -156,13 +156,18 @@ export async function loadCalendar(env: Env, date: string, settings: Settings): 
 }
 
 /**
- * Time the planner must not use on `date` besides meetings: blocks already
- * ticked off (history), blocks placed by hand, and — when planning today —
- * everything before now.
+ * Time the planner must not use on `date` besides meetings: the blocks `keep`
+ * picks (by default those ticked off or placed by hand) and — when planning
+ * today — everything before now.
  */
-function reservedSpans(ctx: PlanningContext, date: string, blocks: blockStore.BlockWithSegments[]): BusySpan[] {
+function reservedSpans(
+  ctx: PlanningContext,
+  date: string,
+  blocks: blockStore.BlockWithSegments[],
+  keep: (block: blockStore.BlockWithSegments) => boolean = blockStore.isFixed,
+): BusySpan[] {
   const spans: BusySpan[] = blocks
-    .filter((b) => b.date === date && blockStore.isFixed(b))
+    .filter((b) => b.date === date && keep(b))
     .map((b) => ({ start: b.startsAt, end: b.endsAt }));
 
   if (date === today(ctx.settings)) spans.push(beforeNow(ctx.settings));
@@ -329,13 +334,24 @@ function heldSessions(ctx: PlanningContext, blocks: blockStore.BlockWithSegments
 }
 
 /**
- * Minutes per task already given a place by hand and not yet ticked: a pinned
- * block from `from` on counts as planned, so its work is not planned twice.
+ * Blocks a new plan works around rather than replaces: placed by hand, or
+ * already committed to Google. Re-planning only fills the gaps they leave, so
+ * planning twice in a row never plans the same work twice — moving committed
+ * work is what Reschedule… is for.
  */
-function pinnedMinutes(blocks: blockStore.BlockWithSegments[], from: string): Map<number, number> {
+const isHeld = (block: blockStore.BlockWithSegments) => block.state !== 'done' && (block.pinned || block.state === 'synced');
+
+/** Time a new plan must leave alone: ticked-off work, blocks placed by hand, and committed blocks. */
+const staysPut = (block: blockStore.BlockWithSegments) => blockStore.isFixed(block) || isHeld(block);
+
+/**
+ * Minutes per task already given a place and not yet ticked: a held block from
+ * `from` on counts as planned, so its work is not planned twice.
+ */
+function heldMinutes(blocks: blockStore.BlockWithSegments[], from: string): Map<number, number> {
   const out = new Map<number, number>();
   for (const block of blocks) {
-    if (!block.pinned || block.date < from || block.state === 'done') continue;
+    if (!isHeld(block) || block.date < from) continue;
     for (const s of block.segments) {
       if (s.doneAt === null) out.set(s.taskId, (out.get(s.taskId) ?? 0) + s.minutes);
     }
@@ -343,9 +359,9 @@ function pinnedMinutes(blocks: blockStore.BlockWithSegments[], from: string): Ma
   return out;
 }
 
-const withoutPinned = <T extends PlannableTask>(tasks: T[], pinned: Map<number, number>): T[] =>
+const withoutHeld = <T extends PlannableTask>(tasks: T[], held: Map<number, number>): T[] =>
   tasks
-    .map((t) => ({ ...t, remainingMin: Math.max(0, t.remainingMin - (pinned.get(t.id) ?? 0)) }))
+    .map((t) => ({ ...t, remainingMin: Math.max(0, t.remainingMin - (held.get(t.id) ?? 0)) }))
     .filter((t) => t.remainingMin > 0);
 
 const toDrafts = (blocks: Plan['blocks']): blockStore.DraftBlock[] =>
@@ -356,16 +372,19 @@ const toDrafts = (blocks: Plan['blocks']): blockStore.DraftBlock[] =>
     segments: b.segments,
   }));
 
-/** Builds a fresh proposal for `date` and stores it as drafts, replacing any earlier one. */
+/**
+ * Builds a fresh proposal for `date` and stores it as drafts, replacing any
+ * earlier one. Committed and pinned blocks stay; only the gaps are planned.
+ */
 export async function generateDay(env: Env, date: string): Promise<Plan> {
   const ctx = await loadContext(env);
   const [calendar, blocks] = await Promise.all([loadCalendar(env, date, ctx.settings), blockStore.listFrom(env.db, date)]);
 
-  const busy = [...calendar.busy, ...reservedSpans(ctx, date, blocks)];
+  const busy = [...calendar.busy, ...reservedSpans(ctx, date, blocks, staysPut)];
   // Sessions: only the one due today, first in its window. Later days' meetings are not known here.
-  const { sessions, redo, companions } = sessionPlan(ctx, date, 7, new Map([[date, busy]]), heldSessions(ctx, blocks.filter((b) => b.pinned)));
+  const { sessions, redo, companions } = sessionPlan(ctx, date, 7, new Map([[date, busy]]), heldSessions(ctx, blocks.filter(isHeld)));
   const redone = forecastableFrom(ctx, date, redo).filter((t) => redo.has(t.id));
-  const tasks = withoutPinned([...schedulableOn(ctx, date).filter((t) => !redo.has(t.id)), ...redone], pinnedMinutes(blocks, date))
+  const tasks = withoutHeld([...schedulableOn(ctx, date).filter((t) => !redo.has(t.id)), ...redone], heldMinutes(blocks, date))
     .filter((t) => !sessions.ids.has(t.id) || sessions.days.get(t.id) === date)
     .filter((t) => (companions.get(t.id) ?? date) <= date)
     .map((t) => ({ ...t, lead: sessions.ids.has(t.id) }));
@@ -393,6 +412,8 @@ export interface CalendarPlanSummary {
   notScheduled: number;
   /** Blocks placed by hand that the plan worked around. */
   pinned: number;
+  /** Blocks already in Google Calendar that the plan worked around (their work counts as planned). */
+  committed: number;
   /** Weeks of sessions that start again, because they could not be finished in the week they began. */
   restarts: SessionRestart[];
   problem: string | null;
@@ -434,10 +455,13 @@ async function loadRangeBusy(
 /**
  * "Plan calendar": lays every schedulable task into its window, day after day
  * from today, until all of it has a place — around meetings, around blocks
- * already ticked off or placed by hand, and keeping every course in order.
+ * already ticked off, placed by hand or committed, and keeping every course in
+ * order.
  *
- * The result is stored as drafts, replacing every earlier unpinned draft from
- * today on. Nothing reaches Google until the plan is committed.
+ * Idempotent: work that already has a block is not planned again, so a second
+ * run with nothing changed puts the same drafts back. The result replaces every
+ * earlier unpinned draft from today on; nothing reaches Google until the plan
+ * is committed.
  */
 export async function planCalendar(env: Env): Promise<CalendarPlanSummary> {
   const ctx = await loadContext(env);
@@ -449,16 +473,17 @@ export async function planCalendar(env: Env): Promise<CalendarPlanSummary> {
 
   const busyByDate = new Map(calendar.busy);
   for (const date of new Set([from, ...blocks.map((b) => b.date)])) {
-    busyByDate.set(date, [...(busyByDate.get(date) ?? []), ...reservedSpans(ctx, date, blocks)]);
+    busyByDate.set(date, [...(busyByDate.get(date) ?? []), ...reservedSpans(ctx, date, blocks, staysPut)]);
   }
 
-  const pinnedBlocks = blocks.filter((b) => b.pinned && b.state !== 'done');
-  const { sessions, redo, restarts, companions } = sessionPlan(ctx, from, PLAN_CALENDAR_DAYS, busyByDate, heldSessions(ctx, pinnedBlocks));
+  const heldBlocks = blocks.filter(isHeld);
+  const { sessions, redo, restarts, companions } = sessionPlan(ctx, from, PLAN_CALENDAR_DAYS, busyByDate, heldSessions(ctx, heldBlocks));
   const forecastable = anchored(forecastableFrom(ctx, from, redo), companions);
-  const tasks = withoutPinned(forecastable, pinnedMinutes(blocks, from));
+  const tasks = withoutHeld(forecastable, heldMinutes(blocks, from));
 
   const plan = planRange(from, PLAN_CALENDAR_DAYS, ctx.shape, ctx.specs, tasks, busyByDate, ctx.closures, sessions);
-  await blockStore.replaceDraftsFrom(env.db, 
+  await blockStore.replaceDraftsFrom(
+    env.db,
     from,
     plan.days.map((d) => ({ date: d.date, drafts: toDrafts(d.blocks) })),
   );
@@ -486,7 +511,8 @@ export async function planCalendar(env: Env): Promise<CalendarPlanSummary> {
         !offered.has(t.id) &&
         remainingMinutes(t, ctx.ticked.get(t.id) ?? 0) > 0,
     ).length,
-    pinned: pinnedBlocks.length,
+    pinned: heldBlocks.filter((b) => b.pinned).length,
+    committed: heldBlocks.filter((b) => !b.pinned).length,
     restarts,
     problem: calendar.problem,
   };
@@ -623,7 +649,7 @@ async function proposeReschedule(env: Env): Promise<RescheduleProposal> {
   }
   const heldDays = heldSessions(ctx, staying.filter((b) => b.state !== 'done' && !blockStore.isLocked(b)));
   const { sessions, redo, restarts, companions } = sessionPlan(ctx, from, PLAN_CALENDAR_DAYS, busyByDate, heldDays);
-  const tasks = withoutPinned(anchored(forecastableFrom(ctx, from, redo), companions), held);
+  const tasks = withoutHeld(anchored(forecastableFrom(ctx, from, redo), companions), held);
 
   const plan = planRange(from, PLAN_CALENDAR_DAYS, ctx.shape, ctx.specs, tasks, busyByDate, ctx.closures, sessions);
   const next = plan.days.flatMap((d) => toDrafts(d.blocks).map((draft) => ({ ...draft, date: d.date })));

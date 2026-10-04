@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 import type { Env } from '../env';
-import { commitDay, deleteBlockEverywhere, moveEvent, syncBlockColors } from '../google/writes';
+import { fitSegments, MIN_BLOCK_MIN } from '../blocks';
+import { commitDay, deleteBlockEverywhere, moveEvent, retimeEvent, syncBlockColors } from '../google/writes';
 import { today } from '../planner';
 import * as blockStore from '../store/blocks';
 import { completeRitual } from '../store/rituals';
@@ -89,6 +90,38 @@ export async function moveBlockTo(env: Env, blockId: number, date: string, start
   if (!start.isValid) throw new Error('Choose a day and a start time.');
   const snapped = start.set({ minute: Math.round(start.minute / 5) * 5, second: 0, millisecond: 0 });
   await place(env, block, snapped);
+}
+
+/**
+ * A block given a new time and length by hand (dragged or resized on the
+ * calendar, or edited in its panel): `startsAt` and `endsAt` are instants,
+ * snapped to 5 minutes in the Settings timezone. Moved only, it keeps its work;
+ * made longer or shorter, its work follows (see `fitSegments`). It is pinned
+ * there, and a committed block's Google event follows — Google first, so a
+ * refusal changes nothing.
+ */
+export async function setBlockTime(env: Env, blockId: number, startsAt: string, endsAt: string): Promise<void> {
+  const block = await movable(env, blockId);
+  const { timezone } = await getSettings(env.db);
+  const snap = (iso: string) => {
+    const t = DateTime.fromISO(iso, { zone: timezone });
+    return t.isValid ? t.set({ minute: Math.round(t.minute / 5) * 5, second: 0, millisecond: 0 }) : null;
+  };
+  const start = snap(startsAt);
+  const end = snap(endsAt);
+  if (!start || !end) throw new Error('Choose a day, a start and an end.');
+  const length = end.diff(start, 'minutes').minutes;
+  if (length < MIN_BLOCK_MIN) throw new Error(`A block lasts at least ${MIN_BLOCK_MIN} minutes.`);
+  if (start.toISODate() !== end.minus({ milliseconds: 1 }).toISODate()) throw new Error('A block cannot run past midnight.');
+
+  const oldLength = DateTime.fromISO(block.endsAt).diff(DateTime.fromISO(block.startsAt), 'minutes').minutes;
+  if (length === oldLength) return place(env, block, start);
+
+  const fitted = fitSegments(block.segments, oldLength, length);
+  const at = { date: start.toISODate()!, startsAt: start.toUTC().toISO()!, endsAt: end.toUTC().toISO()! };
+  const segments = block.segments.map((s, i) => ({ ...s, minutes: fitted[i] })).filter((s) => s.minutes > 0);
+  if (block.state === 'synced') await retimeEvent(env, { ...block, ...at, segments });
+  await blockStore.retimeBlock(env.db, block.id, at, new Map(block.segments.map((s, i) => [s.id, fitted[i]])));
 }
 
 /** Hands a block placed by hand back to the planner: the next plan may move or replace it. */

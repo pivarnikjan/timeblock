@@ -182,21 +182,30 @@ export async function draftDatesFrom(db: TimeblockDb, from: string): Promise<{ d
   return rows.map((r) => ({ date: r.date, blocks: Number(r.count) }));
 }
 
-/** Dates from `from` on that hold committed blocks nobody pinned — what a new plan replaces. */
-export async function replaceableSyncedDatesFrom(db: TimeblockDb, from: string): Promise<string[]> {
-  const rows = await db
-    .selectDistinct({ date: blocks.date })
-    .from(blocks)
-    .where(and(gte(blocks.date, from), eq(blocks.state, 'synced'), eq(blocks.pinned, false)))
-    .orderBy(asc(blocks.date));
-  return rows.map((r) => r.date);
-}
-
 /** Puts a block somewhere new by hand. It is pinned from then on. */
 export async function moveBlock(db: TimeblockDb, id: number, date: string, startsAt: string, endsAt: string): Promise<void> {
   await db
     .update(blocks)
     .set({ date, startsAt, endsAt, pinned: true, updatedAt: new Date().toISOString() })
+    .where(eq(blocks.id, id));
+}
+
+/**
+ * Gives a block a new time and length by hand, with its segments' new minutes
+ * (by segment id; 0 takes a segment off). It is pinned from then on.
+ */
+export async function retimeBlock(
+  db: TimeblockDb,
+  id: number,
+  at: { date: string; startsAt: string; endsAt: string },
+  minutes: Map<number, number>,
+): Promise<void> {
+  const gone = [...minutes].filter(([, m]) => m <= 0).map(([segmentId]) => segmentId);
+  if (gone.length > 0) await db.delete(blockSegments).where(inArray(blockSegments.id, gone));
+  for (const [segmentId, m] of minutes) if (m > 0) await db.update(blockSegments).set({ minutes: m }).where(eq(blockSegments.id, segmentId));
+  await db
+    .update(blocks)
+    .set({ ...at, pinned: true, updatedAt: new Date().toISOString() })
     .where(eq(blocks.id, id));
 }
 

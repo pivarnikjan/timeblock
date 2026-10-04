@@ -45,6 +45,7 @@ export async function ensureTargetCalendar(env: Env): Promise<string> {
 
 export interface CommitResult {
   created: number;
+  /** Leftover TimeBlock events in Google that no block stands behind any more (duplicates), deleted. */
   removed: number;
   calendarId: string;
 }
@@ -61,52 +62,99 @@ async function deleteEvent(env: Env, calendarId: string, eventId: string): Promi
 }
 
 /**
- * Pushes the day's drafts to Google, replacing what TimeBlock put there before.
- *
- * Committed blocks with ticked-off work are kept (event and all) as history,
- * and so are blocks placed by hand (pinned); only untouched ones are deleted. Deletion is keyed on the block id stamped
- * into the event's private extended properties, so an event the user created
- * by hand is never a target.
+ * Pushes the day's drafts to Google. Blocks already committed stay as they are
+ * — a new plan only fills the gaps they leave — so committing never replaces
+ * work that is already there. See `commitDrafts` for why it is idempotent.
  */
 export async function commitDay(env: Env, date: string): Promise<CommitResult> {
-  const settings = await getSettings(env.db);
+  return commitDrafts(env, await blockStore.listForDate(env.db, date));
+}
+
+/** A TimeBlock event in Google, and the block id stamped on it. */
+interface StampedEvent {
+  id: string;
+  blockId: number;
+}
+
+/**
+ * TimeBlock's block events in its own calendar between two instants. Only
+ * events carrying a block id count: an event made by hand in that calendar,
+ * or a vacation's copy, is never touched.
+ */
+async function stampedEvents(env: Env, calendarId: string, timeMin: string, timeMax: string): Promise<StampedEvent[]> {
+  const out: StampedEvent[] = [];
+  let pageToken: string | undefined;
+  do {
+    const page = await env.google.calendar().listEvents(calendarId, { timeMin, timeMax, pageToken });
+    for (const event of page.items) {
+      const blockId = Number(event.extendedProperties?.private?.[BLOCK_ID_KEY]);
+      if (event.id && event.status !== 'cancelled' && Number.isInteger(blockId) && blockId > 0) out.push({ id: event.id, blockId });
+    }
+    pageToken = page.nextPageToken ?? undefined;
+  } while (pageToken);
+  return out;
+}
+
+/**
+ * Sends the drafts among `blocks` to Google, idempotently:
+ *
+ * - A draft whose id is already stamped on an event (a commit cut short after
+ *   Google created it) takes that event over instead of getting a second one.
+ * - With `sweep`, TimeBlock events across the blocks' span that no block
+ *   stands behind any more — left over by an interrupted commit or an older
+ *   plan — are deleted, so Google never shows the same work twice.
+ *
+ * Committing the same drafts twice therefore leaves Google exactly as once.
+ */
+async function commitDrafts(env: Env, blocks: blockStore.BlockWithSegments[], sweep = true): Promise<CommitResult> {
   const calendarId = await ensureTargetCalendar(env);
+  if (blocks.length === 0) return { created: 0, removed: 0, calendarId };
+
+  const settings = await getSettings(env.db);
   const byId = indexHorizons(await listAllHorizons(env.db));
   const colors = windowColors(await listWindows(env.db));
 
-  const day = await blockStore.listForDate(env.db, date);
-
-  let removed = 0;
-  for (const block of day.filter((b) => b.state === 'synced' && !b.pinned)) {
-    const shouldDelete = await blockStore.retireBlock(env.db, block);
-    if (shouldDelete && block.googleEventId && (await deleteEvent(env, calendarId, block.googleEventId))) removed += 1;
-  }
+  const timeMin = blocks.reduce((min, b) => (b.startsAt < min ? b.startsAt : min), blocks[0].startsAt);
+  const timeMax = blocks.reduce((max, b) => (b.endsAt > max ? b.endsAt : max), blocks[0].endsAt);
+  const stamped = await stampedEvents(env, calendarId, timeMin, timeMax);
+  const known = new Set((await blockStore.listCommitted(env.db)).map((b) => b.googleEventId!));
+  const unclaimed = new Map<number, string>();
+  for (const e of stamped) if (!known.has(e.id) && !unclaimed.has(e.blockId)) unclaimed.set(e.blockId, e.id);
 
   let created = 0;
-  for (const block of day.filter((b) => b.state === 'draft')) {
-    if (await insertBlockEvent(env, block, calendarId, settings.timezone, byId, colors)) created += 1;
+  for (const block of blocks.filter((b) => b.state === 'draft')) {
+    const existing = unclaimed.get(block.id);
+    const eventId = await writeBlockEvent(env, block, calendarId, settings.timezone, byId, colors, existing);
+    if (!eventId) continue;
+    known.add(eventId);
+    if (!existing) created += 1;
   }
 
+  let removed = 0;
+  if (sweep) for (const e of stamped) if (!known.has(e.id) && (await deleteEvent(env, calendarId, e.id))) removed += 1;
   return { created, removed, calendarId };
 }
 
 /**
- * Creates a draft block's event in TimeBlock's calendar and marks the block
- * committed. The event takes the Google colour nearest its window's (`colors`,
- * by window id), and that colour is recorded on it: a colour changed in Google
- * later is then recognised as chosen by hand, and wins.
+ * Gives a draft block its event in TimeBlock's calendar — a new one, or
+ * `existing` brought up to date — and marks the block committed. Returns the
+ * event id, or null when Google returned none. The event takes the Google
+ * colour nearest its window's (`colors`, by window id), and that colour is
+ * recorded on it: a colour changed in Google later is then recognised as
+ * chosen by hand, and wins.
  */
-async function insertBlockEvent(
+async function writeBlockEvent(
   env: Env,
   block: blockStore.BlockWithSegments,
   calendarId: string,
   timeZone: string,
   byId: ReturnType<typeof indexHorizons>,
   colors: Map<number, string>,
-): Promise<boolean> {
+  existing?: string,
+): Promise<string | null> {
   const content = eventContent(block.segments, byId);
   const colorId = colorIdOf(block, colors);
-  const event = await env.google.calendar().insertEvent(calendarId, {
+  const body = {
     ...content,
     colorId,
     start: { dateTime: block.startsAt, timeZone },
@@ -114,10 +162,12 @@ async function insertBlockEvent(
     transparency: 'opaque',
     reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 1 }] },
     extendedProperties: { private: { [BLOCK_ID_KEY]: String(block.id), [BLOCK_COLOR_KEY]: colorId } },
-  });
-  if (!event.id) return false;
+  };
+  const api = env.google.calendar();
+  const event = existing ? await api.patchEvent(calendarId, existing, body) : await api.insertEvent(calendarId, body);
+  if (!event.id) return null;
   await blockStore.markSynced(env.db, block.id, event.id);
-  return true;
+  return event.id;
 }
 
 /**
@@ -140,16 +190,8 @@ export async function removeBlockEvents(env: Env, blocks: blockStore.BlockWithSe
  */
 export async function commitBlocks(env: Env, ids: number[]): Promise<number> {
   if (ids.length === 0) return 0;
-  const settings = await getSettings(env.db);
-  const calendarId = await ensureTargetCalendar(env);
-  const byId = indexHorizons(await listAllHorizons(env.db));
-  const colors = windowColors(await listWindows(env.db));
-  let created = 0;
-  for (const id of ids) {
-    const block = await blockStore.getBlock(env.db, id);
-    if (block?.state === 'draft' && (await insertBlockEvent(env, block, calendarId, settings.timezone, byId, colors))) created += 1;
-  }
-  return created;
+  const blocks = (await Promise.all(ids.map((id) => blockStore.getBlock(env.db, id)))).filter((b) => b !== null);
+  return (await commitDrafts(env, blocks, false)).created;
 }
 
 /** The Google colour a block's event should have (see `blockColorId`). */
@@ -225,24 +267,19 @@ export interface CommitRangeResult {
 }
 
 /**
- * Commits a calendar-wide plan: every day from `from` on that holds drafts,
- * plus every day still holding TimeBlock blocks the new plan replaced — those
- * would otherwise stay in Google and double-book the work that moved.
+ * Commits a calendar-wide plan: every draft from `from` on goes to Google.
+ * Blocks committed earlier stay where they are (the plan filled the gaps around
+ * them), and TimeBlock events no block stands behind any more are cleared out
+ * on the way — so committing twice never doubles anything.
  */
 export async function commitFrom(env: Env, from: string): Promise<CommitRangeResult> {
   const drafts = await blockStore.draftDatesFrom(env.db, from);
   if (drafts.length === 0) return { days: 0, created: 0, removed: 0 };
 
-  const dates = [...new Set([...drafts.map((d) => d.date), ...(await blockStore.replaceableSyncedDatesFrom(env.db, from))])].sort();
-  const total: CommitRangeResult = { days: drafts.length, created: 0, removed: 0 };
-  for (const date of dates) {
-    const result = await commitDay(env, date);
-    total.created += result.created;
-    total.removed += result.removed;
-  }
+  const { created, removed } = await commitDrafts(env, await blockStore.listFrom(env.db, from));
   // Blocks committed earlier (or before blocks took their window's colour) follow the same colours.
-  total.recoloured = (await syncBlockColors(env, from)).recoloured;
-  return total;
+  const recoloured = (await syncBlockColors(env, from)).recoloured;
+  return { days: drafts.length, created, removed, recoloured };
 }
 
 /**
@@ -269,6 +306,24 @@ export async function moveEvent(env: Env, block: blockStore.BlockWithSegments): 
   const settings = await getSettings(env.db);
   const calendarId = await ensureTargetCalendar(env);
   await env.google.calendar().patchEvent(calendarId, block.googleEventId, {
+    start: { dateTime: block.startsAt, timeZone: settings.timezone },
+    end: { dateTime: block.endsAt, timeZone: settings.timezone },
+  });
+}
+
+/**
+ * Brings a committed block's Google event in line after its time and length
+ * were changed by hand: the new times, and the title and task list for the
+ * work it now holds. Its colour is left alone.
+ */
+export async function retimeEvent(env: Env, block: blockStore.BlockWithSegments): Promise<void> {
+  if (!block.googleEventId) return;
+  const settings = await getSettings(env.db);
+  const calendarId = await ensureTargetCalendar(env);
+  const { summary, description } = eventContent(block.segments, indexHorizons(await listAllHorizons(env.db)));
+  await env.google.calendar().patchEvent(calendarId, block.googleEventId, {
+    summary,
+    description,
     start: { dateTime: block.startsAt, timeZone: settings.timezone },
     end: { dateTime: block.endsAt, timeZone: settings.timezone },
   });

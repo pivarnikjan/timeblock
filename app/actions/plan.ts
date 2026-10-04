@@ -26,17 +26,32 @@ function refresh() {
 /** Plans start from what the phone knows too — above all, work ticked off there. */
 const pullFromPhone = () => syncQuietly(30_000);
 
+/**
+ * Planning, committing and rescheduling run one at a time: two overlapping runs
+ * would each replace the drafts and then both insert theirs.
+ */
+let running: Promise<unknown> = Promise.resolve();
+function oneAtATime<T>(work: () => Promise<T>): Promise<T> {
+  const next = running.then(work, work);
+  running = next.catch(() => undefined);
+  return next;
+}
+
 export async function generatePlanAction(form: FormData): Promise<void> {
-  await pullFromPhone();
-  await generateDay(str(form, 'date'));
+  await oneAtATime(async () => {
+    await pullFromPhone();
+    await generateDay(str(form, 'date'));
+  });
   refresh();
 }
 
 /** Commits the day's drafts to Google and records the daily ritual as done. */
 export async function commitPlanAction(form: FormData): Promise<void> {
   const date = str(form, 'date');
-  await pullFromPhone();
-  await withEnv(ops.commitDayPlan)(date);
+  await oneAtATime(async () => {
+    await pullFromPhone();
+    await withEnv(ops.commitDayPlan)(date);
+  });
   refresh();
 }
 
@@ -90,6 +105,10 @@ export type PlanCalendarState =
  * (the confirmation) moves them, and "cancel" drops the preview.
  */
 export async function planCalendarAction(_prev: PlanCalendarState, form: FormData): Promise<PlanCalendarState> {
+  return oneAtATime(() => runPlanIntent(form));
+}
+
+async function runPlanIntent(form: FormData): Promise<PlanCalendarState> {
   const intent = form.get('intent');
   try {
     const from = today(await getSettings());
@@ -106,17 +125,6 @@ export async function planCalendarAction(_prev: PlanCalendarState, form: FormDat
   } catch (error) {
     return { kind: 'error', message: (error as Error).message };
   }
-}
-
-/**
- * A block dragged on the calendar. It keeps its length, moves by whole days
- * and 5-minute steps, and is pinned there: windows do not apply to a block
- * placed by hand, and re-planning works around it. A committed block's Google
- * event moves with it.
- */
-export async function moveBlockAction(blockId: number, deltaDays: number, deltaMinutes: number): Promise<void> {
-  await withEnv(ops.moveBlockBy)(blockId, deltaDays, deltaMinutes);
-  refresh();
 }
 
 /** Hands a block placed by hand back to the planner: the next plan may move or replace it. */

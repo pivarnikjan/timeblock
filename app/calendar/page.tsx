@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { DateTime } from 'luxon';
 import { CalendarHeader, FilterPanel } from '@/components/calendar/calendar-chrome';
 import { EventPanel } from '@/components/calendar/event-panel';
+import { PendingBar, PendingEditsProvider } from '@/components/calendar/pending-edits';
 import { MonthGrid } from '@/components/calendar/month-grid';
 import { PlanCalendarBar } from '@/components/plan-calendar-bar';
 import { TimeGrid } from '@/components/calendar/time-grid';
@@ -74,19 +75,22 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
         </p>
       )}
 
-      <div
-        className={`grid gap-5 ${
-          !selected
-            ? 'lg:grid-cols-[13rem_minmax(0,1fr)]'
-            : selected.kind === 'vacation'
-              ? 'lg:grid-cols-[13rem_minmax(0,1fr)_22rem]'
-              : 'lg:grid-cols-[13rem_minmax(0,1fr)_19rem]'
-        }`}
-      >
-        <FilterPanel data={data} />
-        {view === 'month' ? <MonthGrid data={data} /> : <TimeGrid data={data} />}
-        {selected && <EventPanel key={selected.id} data={data} item={selected} conflicts={conflicts} />}
-      </div>
+      <PendingEditsProvider>
+        <PendingBar />
+        <div
+          className={`grid gap-5 ${
+            !selected
+              ? 'lg:grid-cols-[13rem_minmax(0,1fr)]'
+              : selected.kind === 'vacation'
+                ? 'lg:grid-cols-[13rem_minmax(0,1fr)_22rem]'
+                : 'lg:grid-cols-[13rem_minmax(0,1fr)_19rem]'
+          }`}
+        >
+          <FilterPanel data={data} />
+          {view === 'month' ? <MonthGrid data={data} /> : <TimeGrid data={data} />}
+          {selected && <EventPanel key={selected.id} data={data} item={selected} conflicts={conflicts} />}
+        </div>
+      </PendingEditsProvider>
 
       {day ? (
         <PlanningPanel day={day} />

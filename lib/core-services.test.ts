@@ -73,6 +73,95 @@ describe('core services over a real database', () => {
     await expect(ops.deleteBlock(env, first.id)).rejects.toThrow(/ticked-off work/);
   });
 
+  it('plans idempotently: planning again, before or after a commit, never plans the same work twice', async () => {
+    const { db, google, env } = setup();
+    await activeTask(env, 'Write the report', 150);
+    await activeTask(env, 'Read the paper', 45);
+
+    const first = await planCalendar(env);
+    const again = await planCalendar(env);
+    expect(again.blocks).toBe(first.blocks);
+    expect((await blockStore.listFrom(db, first.from)).length).toBe(first.blocks);
+
+    await commitFrom(env, first.from);
+    const afterCommit = await planCalendar(env);
+    expect(afterCommit.blocks).toBe(0);
+    expect(afterCommit.committed).toBe(first.blocks);
+    const blocksNow = await blockStore.listFrom(db, first.from);
+    expect(blocksNow.every((b) => b.state === 'synced')).toBe(true);
+    expect(blocksNow.flatMap((b) => b.segments).reduce((n, s) => n + s.minutes, 0)).toBe(195);
+
+    // Committing again changes nothing in Google.
+    const { targetCalendarId } = await getSettings(db);
+    const before = ownEvents(google, targetCalendarId!).map((e) => e.id).sort();
+    await commitFrom(env, first.from);
+    expect(ownEvents(google, targetCalendarId!).map((e) => e.id).sort()).toEqual(before);
+  });
+
+  it('takes over the event of a commit that was cut short, and clears events no block stands behind', async () => {
+    const { db, google, env } = setup();
+    await activeTask(env, 'Course module', 60);
+    const plan = await planCalendar(env);
+    const [draft] = await blockStore.listFrom(db, plan.from);
+
+    // Google created the event, but the block was never marked committed.
+    const { ensureTargetCalendar } = await import('@timeblock/core/google/writes');
+    const calendarId = await ensureTargetCalendar(env);
+    const leftover = google.addEvent(calendarId, {
+      summary: 'Course module',
+      start: { dateTime: draft.startsAt },
+      end: { dateTime: draft.endsAt },
+      extendedProperties: { private: { [BLOCK_ID_KEY]: String(draft.id) } },
+    });
+    // And an older plan's event whose block is long gone.
+    google.addEvent(calendarId, {
+      summary: 'Old block',
+      start: { dateTime: draft.startsAt },
+      end: { dateTime: draft.endsAt },
+      extendedProperties: { private: { [BLOCK_ID_KEY]: '999999' } },
+    });
+    // An event made by hand in TimeBlock's calendar is never touched.
+    const byHand = google.addEvent(calendarId, { summary: 'Mine', start: { dateTime: draft.startsAt }, end: { dateTime: draft.endsAt } });
+
+    const result = await commitFrom(env, plan.from);
+    expect(result.created).toBe(0);
+    expect(result.removed).toBe(1);
+    expect((await blockStore.getBlock(db, draft.id))!.googleEventId).toBe(leftover);
+    expect(ownEvents(google, calendarId).map((e) => e.id).sort()).toEqual([leftover, byHand].sort());
+  });
+
+  it('resizes a committed block: its work and its Google event follow, and it is pinned', async () => {
+    const { db, google, env } = setup();
+    await activeTask(env, 'Course module', 60);
+    const plan = await planCalendar(env);
+    await commitFrom(env, plan.from);
+    const [block] = await blockStore.listFrom(db, plan.from);
+    const { targetCalendarId, timezone } = await getSettings(db);
+    const start = DateTime.fromISO(block.startsAt).setZone(timezone);
+
+    // 30 minutes shorter: the task keeps 30 of its 60 minutes here.
+    await ops.setBlockTime(env, block.id, start.toISO()!, start.plus({ minutes: 30 }).toISO()!);
+    let after = (await blockStore.getBlock(db, block.id))!;
+    expect(after.pinned).toBe(true);
+    expect(after.segments.map((s) => s.minutes)).toEqual([30]);
+    const event = google.events.get(targetCalendarId!)!.get(block.googleEventId!)!;
+    expect(event.end?.dateTime).toBe(after.endsAt);
+    expect(event.description).toContain('30m');
+
+    // The next plan puts the other 30 minutes somewhere else — and only those.
+    const replan = await planCalendar(env);
+    expect(replan.plannedMinutes).toBe(30);
+
+    // Moved and made 45 minutes long, snapped to 5 minutes.
+    const later = start.plus({ hours: 1, minutes: 2 });
+    await ops.setBlockTime(env, block.id, later.toISO()!, later.plus({ minutes: 45 }).toISO()!);
+    after = (await blockStore.getBlock(db, block.id))!;
+    expect(DateTime.fromISO(after.startsAt).setZone(timezone).toFormat('HH:mm')).toBe(start.plus({ hours: 1 }).toFormat('HH:mm'));
+    expect(after.segments.map((s) => s.minutes)).toEqual([45]);
+
+    await expect(ops.setBlockTime(env, block.id, later.toISO()!, later.plus({ minutes: 10 }).toISO()!)).rejects.toThrow(/at least 15/);
+  });
+
   it('deletes an untouched committed block together with its Google event', async () => {
     const { db, google, env } = setup();
     await activeTask(env, 'Read', 30);

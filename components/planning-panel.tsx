@@ -286,7 +286,7 @@ function BlockChecklist({ day }: { day: DayView }) {
                 <form action={unpinBlockAction} className="flex items-center gap-1">
                   <span title="Placed by hand — planning works around it">📌 pinned</span>
                   <input type="hidden" name="blockId" value={block.id} />
-                  <button type="submit" className="text-accent hover:underline" title="Let the next plan move or replace this block">
+                  <button type="submit" className="text-accent hover:underline" title="Let planning move this block again">
                     unpin
                   </button>
                 </form>

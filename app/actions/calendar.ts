@@ -6,7 +6,10 @@ import { VIEWS } from '@timeblock/core/calendar/views';
 import { enumOf, str } from '@/lib/forms';
 import { withEnv } from '@/lib/env';
 import { deleteGoogleEvent } from '@timeblock/core/operations/vacation';
-import { chooseEventCategory, editEventTime } from '@timeblock/core/operations/events';
+import { DateTime } from 'luxon';
+import { changeEventTime, type EventTimeScope } from '@timeblock/core/google/event-time';
+import { chooseEventCategory, createCategoryForEvent } from '@timeblock/core/operations/events';
+import { setBlockTime } from '@timeblock/core/operations/plan';
 import { setMark } from '@/lib/repo/event-marks';
 import { updateCalendarFilters, updateSettings } from '@/lib/repo/settings';
 
@@ -140,12 +143,23 @@ export type EventEditState =
   | { kind: 'error'; message: string };
 
 /**
- * The event panel's Category picker: a category, 'none', or 'rules' (let the
- * title words decide). On the event's series, so every repeat follows; the
- * colour follows in Google too.
+ * The event panel's Category picker: a category, 'none', 'rules' (let the
+ * title words decide), or 'new' (create one from the form's name, colour and
+ * title words, and put the event in it). On the event's series, so every
+ * repeat follows; the colour follows in Google too.
  */
 export async function setEventCategoryAction(_prev: EventEditState, form: FormData): Promise<EventEditState> {
   const raw = str(form, 'choice');
+  if (raw === 'new') {
+    const created = await withEnv(createCategoryForEvent)(str(form, 'key'), String(form.get('title') ?? ''), {
+      name: String(form.get('name') ?? ''),
+      color: String(form.get('color') ?? ''),
+      keywords: String(form.get('keywords') ?? ''),
+    });
+    if (!created.ok) return { kind: 'error', message: created.message };
+    revalidatePath('/', 'layout');
+    return { kind: 'saved', at: Date.now(), warning: created.warning };
+  }
   const choice = raw === 'none' || raw === 'rules' ? raw : Number(raw);
   if (typeof choice === 'number' && !Number.isInteger(choice)) return { kind: 'error', message: 'Unknown category.' };
   const warning = await withEnv(chooseEventCategory)(str(form, 'key'), String(form.get('title') ?? ''), choice);
@@ -153,24 +167,46 @@ export async function setEventCategoryAction(_prev: EventEditState, form: FormDa
   return { kind: 'saved', at: Date.now(), warning };
 }
 
+/** One unsaved change from the calendar: a Google event or a block with a new start and end (ISO instants). */
+export type CalendarEdit =
+  | { id: string; kind: 'event'; calendarId: string; eventId: string; seriesId: string; start: string; end: string; scope: EventTimeScope }
+  | { id: string; kind: 'block'; blockId: number; start: string; end: string };
+
+const text = (value: unknown) => (typeof value === 'string' && value !== '' ? value : null);
+
 /**
- * The event panel's Edit time: a new day, start and end for a Google event —
- * for a repeating one, this occurrence or this and every following one.
+ * Saves the calendar's unsaved changes — moved or resized on the grid, or
+ * edited in the event panel — one by one: an event's new time goes to Google
+ * (a repeating one for this occurrence, or this and following), a block moves
+ * with its Google event. Returns what failed, by edit id; the rest is saved.
  */
-export async function editEventTimeAction(_prev: EventEditState, form: FormData): Promise<EventEditState> {
-  try {
-    await withEnv(editEventTime)({
-      calendarId: str(form, 'calendarId'),
-      eventId: str(form, 'eventId'),
-      seriesId: str(form, 'seriesId'),
-      date: str(form, 'date'),
-      startTime: str(form, 'startTime'),
-      endTime: str(form, 'endTime'),
-      scope: form.get('scope') === 'following' ? 'following' : 'this',
-    });
-  } catch (error) {
-    return { kind: 'error', message: (error as Error).message };
+export async function saveCalendarEditsAction(edits: CalendarEdit[]): Promise<{ id: string; error: string }[]> {
+  const failed: { id: string; error: string }[] = [];
+  const moveEvent = withEnv(changeEventTime);
+  const retimeBlock = withEnv(setBlockTime);
+  for (const edit of Array.isArray(edits) ? edits : []) {
+    const id = text(edit?.id) ?? '?';
+    try {
+      const start = text(edit.start);
+      const end = text(edit.end);
+      if (!start || !end) throw new Error('Choose a start and an end.');
+      if (edit.kind === 'block') {
+        if (!Number.isInteger(edit.blockId)) throw new Error('Unknown block.');
+        await retimeBlock(edit.blockId, start, end);
+      } else if (edit.kind === 'event') {
+        const calendarId = text(edit.calendarId);
+        const eventId = text(edit.eventId);
+        const seriesId = text(edit.seriesId);
+        if (!calendarId || !eventId || !seriesId) throw new Error('Unknown event.');
+        if (!(DateTime.fromISO(end) > DateTime.fromISO(start))) throw new Error('The end must come after the start.');
+        await moveEvent({ calendarId, eventId, seriesId, start, end, scope: edit.scope === 'following' ? 'following' : 'this' });
+      } else {
+        throw new Error('Unknown change.');
+      }
+    } catch (error) {
+      failed.push({ id, error: (error as Error).message });
+    }
   }
   revalidatePath('/', 'layout');
-  return { kind: 'saved', at: Date.now(), warning: null };
+  return failed;
 }
