@@ -68,20 +68,46 @@ export interface CategoryInput {
 
 export type CategorySaved = { ok: true; category: EventCategory | null; warning: string | null } | { ok: false; message: string };
 
-/** Creates a category, or updates one when `id` is given; events then take its colour in Google too. */
-export async function saveCategory(env: Env, input: CategoryInput, id?: number): Promise<CategorySaved> {
+/** A category form's values cleaned up, or what is wrong with them. */
+function validCategory(input: CategoryInput): { name: string; color: string; keywords: string } | { message: string } {
   const name = input.name.trim();
   const color = parseHexColor(input.color);
-  if (name === '') return { ok: false, message: 'Give the category a name.' };
-  if (!color) return { ok: false, message: 'Choose a colour.' };
+  if (name === '') return { message: 'Give the category a name.' };
+  if (!color) return { message: 'Choose a colour.' };
   const keywords = input.keywords
     .split(/[\n,]/)
     .map((w) => w.trim())
     .filter(Boolean)
     .join('\n');
+  return { name, color, keywords };
+}
+
+/** Creates a category, or updates one when `id` is given; events then take its colour in Google too. */
+export async function saveCategory(env: Env, input: CategoryInput, id?: number): Promise<CategorySaved> {
+  const valid = validCategory(input);
+  if ('message' in valid) return { ok: false, message: valid.message };
+  const { name, color, keywords } = valid;
   let category: EventCategory | null = null;
   if (id) await updateCategory(env.db, id, { name, color, keywords });
   else category = await createCategory(env.db, { name, color, keywords });
+  try {
+    await syncCategoryColors(env);
+    return { ok: true, category, warning: null };
+  } catch (error) {
+    return { ok: true, category, warning: repaintWarning(error) };
+  }
+}
+
+/**
+ * The event panel's "+ New category…": creates a category and puts this event
+ * in it (for a repeating event, every repeat). Other events whose titles hold
+ * its words follow; every one of them takes its colour in Google too.
+ */
+export async function createCategoryForEvent(env: Env, key: string, title: string, input: CategoryInput): Promise<CategorySaved> {
+  const valid = validCategory(input);
+  if ('message' in valid) return { ok: false, message: valid.message };
+  const category = await createCategory(env.db, valid);
+  await setEventCategory(env.db, key, title, category.id);
   try {
     await syncCategoryColors(env);
     return { ok: true, category, warning: null };

@@ -116,13 +116,20 @@ beside the calendar (the grid stays where it is; **×** closes it):
   - **Placeholder** — time held, not taken: *Plan calendar* and *Generate the
     day* may schedule work during it. Drawn hatched.
   - **Show on the calendar** — untick to hide it.
+  - **Its time, at the top of the panel, is where it is changed** (calendars
+    you can edit; all-day events are moved in Google Calendar). Click it: pick
+    another day (or **‹ ›** a day earlier or later), a start and an end, a
+    length in one click (15m … 2h — the start stays), or **−15 / +15 min**.
+    The change shows on the calendar at once, dashed, and reaches Google only
+    with **Save to Google Calendar**; **Undo** puts it back. A repeating event
+    asks: **this one**, or **this and following** (Google's own split: earlier
+    repeats keep their time, and a new series carries on with the new one,
+    keeping the event's category and marks).
   - **Category** — see *Event categories* below: by its title words, one you
-    pick, or none.
-  - **Edit time** — a new day, start and end, changed in Google. A repeating
-    event asks: **This event only**, or **This and all following events**
-    (Google's own split: earlier repeats keep their time, and a new series
-    carries on with the new one, keeping the event's category and marks).
-    All-day events are moved in Google Calendar.
+    pick, or none. **+ New category…** (offered right under the picker when the
+    event has none) makes one on the spot — name, one of Google's colours, and
+    the event's title as its words (clear them to put just this event in it) —
+    and puts the event in it.
   - **Delete from Google Calendar**, after a confirmation. For a repeating event
     only this occurrence is deleted. Read-only calendars (holidays, calendars
     shared with you to view) cannot be deleted from.
@@ -307,18 +314,35 @@ on, one after another, until every scheduled task has a place:
   goal is done: work from later weeks is pulled forward rather than waiting for
   its week, earliest deadline first. Month backlogs and loose tasks are left out (the summary says how many) until you move them into
   a week or mark them active.
+- **Never twice.** Work that already has a block — committed to Google or
+  placed by hand — counts as planned: only what has no block yet is planned,
+  so running *Plan calendar* again with nothing changed gives the same drafts,
+  and right after a commit it plans nothing. Moving committed work around is
+  what **Reschedule…** is for.
 - The result is **drafts** — dashed on the grid — replacing earlier drafts from
-  today on. **Commit N blocks to Google** sends them all; TimeBlock's earlier,
-  unpinned blocks from today on are replaced. **Discard drafts** throws the
-  proposal away.
+  today on. **Commit N blocks to Google** sends them; blocks already there stay
+  as they are. Committing is safe to repeat: a block whose event Google already
+  has (a commit cut short) takes that event over, and TimeBlock events in Google
+  that no block stands behind any more are removed. **Discard drafts** throws
+  the proposal away.
 
-**Adjust by hand.** Drag any block that has nothing ticked off to another time
-or another visible day; it snaps to 5 minutes and shows its new time while you
-drag. Where you drop it is where it stays — windows do not apply to a block you
-placed, so a Learning block may end at 14:15. A moved block is **pinned** (📌):
-the next *Plan calendar* or *Generate the day* works around it and does not plan
-its minutes again. **unpin** (in the Today view's block list) hands it back to
-the planner. Moving a committed block moves its Google event too.
+**Adjust by hand.** Drag any block that has nothing ticked off — or any event
+in a calendar you can edit — to another time or another visible day, or drag
+its **bottom edge** to make it longer or shorter; it snaps to 5 minutes and
+shows its new time while you drag. Nothing is saved yet: the item stays where
+you dropped it, dashed, with its old place outlined, and a bar at the bottom of
+the screen lists every unsaved change (*old time → new time*, and for a
+repeating event *this one* or *this and following*). **Save to Google
+Calendar** sends them all; **Undo** takes one back, **Undo all** every one.
+The event panel's time editor (above) works on the same changes.
+
+Where you drop a block is where it stays — windows do not apply to a block you
+placed, so a Learning block may end at 14:15. A block made longer gives its last
+task the extra time; made shorter, it loses minutes from its last task (then the
+one before) and the next plan places them elsewhere. A moved block is **pinned**
+(📌): the next *Plan calendar* or *Generate the day* works around it and does
+not plan its minutes again. **Unpin** hands a draft back to the planner. A
+committed block's Google event follows it, title and task list included.
 
 **Reschedule when the calendar changes.** A meeting lands on planned work, a
 vacation is set, a block is dragged somewhere else — and since courses run in

@@ -25,3 +25,31 @@ export function statusAfterTicks(task: Pick<Task, 'status' | 'estimateMin'>, tic
   if (!done && task.status === 'done') return 'active';
   return null;
 }
+
+/** No block is made shorter than this by hand. */
+export const MIN_BLOCK_MIN = 15;
+
+/**
+ * A block's work after it was made `newLength` minutes long by hand, as each
+ * segment's new minutes (in block order; 0 = the segment comes off).
+ *
+ * Longer: the last task gets the extra time. Shorter: the slack a block has
+ * from being rounded up to 5 minutes goes first, then minutes come off the
+ * last task, then the one before it — work that no longer fits is planned
+ * again by the next plan.
+ */
+export function fitSegments(segments: { minutes: number }[], oldLength: number, newLength: number): number[] {
+  const minutes = segments.map((s) => s.minutes);
+  if (minutes.length === 0 || newLength === oldLength) return minutes;
+  if (newLength > oldLength) {
+    minutes[minutes.length - 1] += newLength - oldLength;
+    return minutes;
+  }
+  let over = minutes.reduce((n, m) => n + m, 0) - newLength;
+  for (let i = minutes.length - 1; i >= 0 && over > 0; i--) {
+    const cut = Math.min(minutes[i], over);
+    minutes[i] -= cut;
+    over -= cut;
+  }
+  return minutes;
+}

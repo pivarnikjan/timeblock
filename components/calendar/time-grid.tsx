@@ -4,7 +4,8 @@ import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
 import { textOn } from '@timeblock/core/calendar/colors';
 import { layoutColumns, layoutLanes } from '@timeblock/core/calendar/layout';
 import { vacationPieces, type VacationPiece } from '@timeblock/core/calendar/vacation-overlay';
-import { DraggableBlock } from './draggable-block';
+import { EditableChip } from './editable-chip';
+import { editTarget } from './edit-target';
 import { chipStyle, ItemLink, itemHref } from './event-chip';
 import { ScrollArea } from './scroll-area';
 
@@ -217,23 +218,26 @@ function DayColumn({
           </span>
         );
 
-        // Blocks that start and end on this day can be dragged; anything else stays a link.
-        if (item.movable && item.blockId !== null && item.planDate && item.start.hasSame(item.end.minus({ milliseconds: 1 }), 'day')) {
+        // Blocks with nothing ticked off and events in calendars you can edit can be moved and
+        // resized (the change waits to be saved); anything else stays a link.
+        const target = editTarget(item, data.zone);
+        if (target) {
           return (
-            <DraggableBlock
+            <EditableChip
               key={`${item.id}@${day}`}
-              blockId={item.blockId}
+              target={target}
               href={itemHref(data, item)}
               className={chipClass}
               style={chipStyleProps}
               dayIndex={dayIndex}
               dayCount={data.range.days.length}
               pxPerMin={PX_PER_MIN}
-              startMin={item.start.hour * 60 + item.start.minute}
-              lengthMin={Math.round(item.end.diff(item.start, 'minutes').minutes)}
+              hoursStartMin={startMin}
+              colLeftPct={(col / cols) * 100}
+              colWidthPct={100 / cols}
             >
               {content}
-            </DraggableBlock>
+            </EditableChip>
           );
         }
         return (

@@ -26,7 +26,7 @@ export function PlanCalendarBar({ drafts, googleConnected }: { drafts: DraftOver
   const [state, action, pending] = useActionState<PlanCalendarState, FormData>(planCalendarAction, { kind: 'idle' });
 
   const confirmCommit = (e: MouseEvent<HTMLButtonElement>) => {
-    if (!window.confirm(`Send ${plural(drafts.blocks, 'block')} to Google Calendar? TimeBlock's earlier blocks from today on that you did not pin are replaced.`)) {
+    if (!window.confirm(`Send ${plural(drafts.blocks, 'block')} to Google Calendar? Blocks already there stay where they are.`)) {
       e.preventDefault();
     }
   };
@@ -77,8 +77,8 @@ export function PlanCalendarBar({ drafts, googleConnected }: { drafts: DraftOver
       {state.kind === 'idle' && (
         <p className="text-xs text-muted">
           Lays every scheduled task into its window, day after day from today, until all of it has a place — around your
-          meetings, and keeping each course in order. Drag any block to adjust it; a block you move is pinned (📌) and the
-          next plan works around it. New meetings since? <strong>Reschedule…</strong> shows how many tasks no longer fit and,
+          meetings, and keeping each course in order. Work that already has a block — committed or pinned (📌) — is never
+          planned twice, so running it again only fills the gaps. New meetings since? <strong>Reschedule…</strong> shows how many tasks no longer fit and,
           once you confirm, moves just those — and everything after them.
         </p>
       )}
@@ -87,7 +87,7 @@ export function PlanCalendarBar({ drafts, googleConnected }: { drafts: DraftOver
       {state.kind === 'committed' && (
         <p className="text-sm text-emerald-600">
           Committed: {plural(state.result.created, 'event')} created across {plural(state.result.days, 'day')}
-          {state.result.removed > 0 ? `, ${plural(state.result.removed, 'earlier event')} replaced` : ''}
+          {state.result.removed > 0 ? `, ${plural(state.result.removed, 'leftover duplicate')} removed from Google` : ''}
           {state.result.recoloured ? `, ${plural(state.result.recoloured, 'earlier event')} given its window's colour` : ''}.
         </p>
       )}
@@ -250,10 +250,20 @@ function PlanSummary({ summary: s }: { summary: Extract<PlanCalendarState, { kin
             Review from {day(s.firstDate)} →
           </Link>
         </p>
+      ) : s.committed > 0 || s.pinned > 0 ? (
+        <p>Nothing new to plan — every open task already has its blocks.</p>
       ) : (
         <p>Nothing to plan — no open task is in a week yet or marked active.</p>
       )}
-      {s.pinned > 0 && <p className="text-xs text-muted">Worked around {plural(s.pinned, 'block')} you placed by hand.</p>}
+      {(s.pinned > 0 || s.committed > 0) && (
+        <p className="text-xs text-muted">
+          Kept {[s.committed > 0 && `${plural(s.committed, 'block')} already in Google Calendar`, s.pinned > 0 && `${plural(s.pinned, 'block')} you placed by hand`]
+            .filter(Boolean)
+            .join(' and ')}{' '}
+          — {s.pinned + s.committed === 1 ? 'its' : 'their'} work is not planned again.
+          {s.committed > 0 && ' Use Reschedule… to move committed work.'}
+        </p>
+      )}
       <Restarts restarts={s.restarts} />
       {s.unfinished.length > 0 && (
         <p className="text-xs text-amber-600">

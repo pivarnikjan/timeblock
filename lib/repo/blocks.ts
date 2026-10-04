@@ -20,7 +20,6 @@ export const replaceDrafts = withDb(store.replaceDrafts);
 export const replaceDraftsFrom = withDb(store.replaceDraftsFrom);
 export const deleteDraftsFrom = withDb(store.deleteDraftsFrom);
 export const draftDatesFrom = withDb(store.draftDatesFrom);
-export const replaceableSyncedDatesFrom = withDb(store.replaceableSyncedDatesFrom);
 export const moveBlock = withDb(store.moveBlock);
 export const relocateDone = withDb(store.relocateDone);
 export const deleteBlock = withDb(store.deleteBlock);

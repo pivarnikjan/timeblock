@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-10-04 | v0.15 | [E24 · Plan once, edit in place](#e24--plan-once-edit-in-place) | TB-090 – TB-093 | Done on the desktop |
 | 2026-10-01 | v0.14 | [E23 · Event categories](#e23--event-categories) | TB-088 – TB-089 | Done, desktop and phone |
 | 2026-09-30 | v0.13 | [E22 · The whole planner on the phone](#e22--the-whole-planner-on-the-phone) | TB-087 | In progress — shared planner done; the phone screens follow in timeblock-mobile |
 | 2026-09-29 | v0.12 | [E21 · Phone sync](#e21--phone-sync) | TB-082 – TB-086 | Desktop done; the Android app follows in timeblock-mobile |
@@ -45,6 +46,90 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-10-04 · v0.15 — Plan once, edit in place
+
+**Theme.** Planning that never doubles work, and times changed right where
+they are shown — on the grid or in the panel — reaching Google only when you
+say so.
+
+**Upgrade notes.** No migration. *Plan calendar* and *Generate the day* no
+longer replace committed blocks: work that already has a block is kept, and
+only the gaps are planned. Existing duplicates (committed blocks plus drafts
+for the same work) clear up with the next *Plan calendar*.
+
+## E24 · Plan once, edit in place
+
+> I can press Plan calendar as often as I like, and stretching a meeting by
+> half an hour is one drag and one Save.
+
+### TB-090 · Planning is idempotent
+*As a planner, I want Plan calendar to never plan the same work twice, so that
+re-running it is always safe.*
+
+Acceptance criteria
+- [x] Committed and pinned blocks from today on count as planned: their time is
+      kept free and their minutes are not planned again — on *Plan calendar*
+      and *Generate the day* alike. A second run with nothing changed puts back
+      the same drafts; right after a commit it plans nothing.
+- [x] Commit only adds drafts; it no longer replaces committed blocks.
+- [x] Commit is safe to repeat: a draft whose id is already stamped on a Google
+      event (a commit cut short) takes that event over; TimeBlock events no
+      block stands behind any more are deleted. Events without a block stamp
+      (made by hand, vacation copies) are never touched.
+- [x] Planning, committing and rescheduling run one at a time.
+
+### TB-091 · Move and resize on the grid, then save
+*As a planner, I want to drag an event or block to another time, or drag its
+edge to change its length, and send it to Google once I am sure.*
+
+Acceptance criteria
+- [x] Blocks with nothing ticked off and events in calendars the account can
+      edit can be dragged (another time or visible day) and resized from their
+      bottom edge, in 5-minute steps, at least 15 minutes.
+- [x] A change is not saved: the item stays where it was dropped, dashed, with
+      its old place outlined. A bar at the bottom of the screen lists every
+      unsaved change, old → new, with **this one / this and following** for a
+      repeating event; **Save to Google Calendar** sends them all, **Undo** /
+      **Undo all** take them back. A change that fails stays, with the reason.
+      Leaving the page with unsaved changes asks first.
+- [x] A resized block's work follows: longer gives its last task the time;
+      shorter takes the rounding slack, then minutes from its last tasks — the
+      next plan places them again. It is pinned, and a committed block's Google
+      event follows with its new times, title and task list.
+
+### TB-092 · The time is where it is changed
+*As a planner, I want to change an event's time by clicking the time in its
+panel, with quick steps rather than a form.*
+
+Acceptance criteria
+- [x] The time at the top of the panel opens the editor: day (‹ › a day either
+      way), from, until, one-click lengths (15m – 2h, the start stays) and
+      −15 / +15 min. Every change shows on the grid at once, as an unsaved
+      change shared with the bar; **Save to Google Calendar** (or **Save** for a
+      draft) sends just this one. The old *Edit time* section is gone.
+
+### TB-093 · A new category from the event
+*As a planner, I want to make a category for an event that has none, right in
+its panel.*
+
+Acceptance criteria
+- [x] **+ New category…** in the Category picker, offered under it too when the
+      event has no category: name, one of Google's eleven colours (the first
+      not yet used is picked), and title words pre-filled with the event's
+      title. **Create & assign** makes it, puts the event (every repeat) in it,
+      and recolours in Google.
+
+Where to look: `packages/core/src/planner.ts` (`isHeld`, `heldMinutes`),
+`google/writes.ts` (`commitDrafts`, `retimeEvent`), `blocks.ts`
+(`fitSegments` + test), `store/blocks.ts` (`retimeBlock`),
+`operations/plan.ts` (`setBlockTime`), `operations/events.ts`
+(`createCategoryForEvent`) · `app/actions/calendar.ts`
+(`saveCalendarEditsAction`), `app/actions/plan.ts` · `components/calendar/`
+`pending-edits.tsx`, `editable-chip.tsx`, `time-editor.tsx`,
+`edit-target.ts`, `event-edit.tsx` · `lib/core-services.test.ts`.
 
 ---
 

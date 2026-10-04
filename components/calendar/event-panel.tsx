@@ -8,19 +8,23 @@ import type { CalendarData, CalendarItem } from '@/lib/calendar/load';
 import type { Conflicts } from '@/lib/calendar/vacation-conflicts';
 import { calendarHref } from '@timeblock/core/calendar/views';
 import { formInputs } from '@timeblock/core/vacation';
-import { EventCategoryForm, EventTimeForm } from './event-edit';
+import { editTarget } from './edit-target';
+import { EventCategoryForm } from './event-edit';
+import { TimeEditor } from './time-editor';
 import { ToggleForm } from './toggle';
 import { VacationCleanup } from './vacation-cleanup';
 import { VacationForm } from './vacation-form';
 
 /**
  * The panel beside the calendar for the item that was clicked: what it is and
- * when, and what can be done with it. A Google event can be marked important
+ * when — the time itself is where it is changed, for an event you can edit or a
+ * block not yet ticked off — and what can be done with it. A Google event can be marked important
  * (always in Month) or a placeholder (planning may use its time), hidden, or
  * deleted; a TimeBlock block can be opened in its day, unpinned, or deleted.
  */
 export function EventPanel({ data, item, conflicts = null }: { data: CalendarData; item: CalendarItem; conflicts?: Conflicts | null }) {
   const close = calendarHref(data.range.view, data.range.anchor);
+  const target = editTarget(item, data.zone);
   return (
     <aside className="space-y-4 rounded-lg border border-border bg-surface p-4 text-sm lg:sticky lg:top-4 lg:self-start">
       <div className="flex items-start gap-2">
@@ -31,7 +35,7 @@ export function EventPanel({ data, item, conflicts = null }: { data: CalendarDat
         </Link>
       </div>
 
-      <p className="text-muted">{when(item)}</p>
+      {target ? <TimeEditor target={target} /> : <p className="text-muted">{when(item)}</p>}
 
       {item.kind === 'event' ? (
         <EventDetails data={data} item={item} close={close} />
@@ -102,24 +106,6 @@ function EventDetails({ data, item, close }: { data: CalendarData; item: Calenda
           recurring={item.recurring}
         />
       </div>
-
-      {item.writable && !item.allDay && (
-        <details className="border-t border-border pt-3">
-          <summary className="cursor-pointer text-xs font-medium text-muted hover:text-foreground">Edit time</summary>
-          <div className="pt-3">
-            <EventTimeForm
-              key={`${item.id}|${item.start.toISO()}|${item.end.toISO()}`}
-              calendarId={item.calendarId!}
-              eventId={item.eventId!}
-              seriesId={item.seriesId!}
-              date={item.start.toISODate()!}
-              start={item.start.toFormat('HH:mm')}
-              end={item.end.toFormat('HH:mm')}
-              recurring={item.recurring}
-            />
-          </div>
-        </details>
-      )}
 
       <div className="space-y-3 border-t border-border pt-3">
         <Mark
@@ -277,7 +263,7 @@ function BlockDetails({ item, close }: { item: CalendarItem; close: string }) {
         {item.pinned && item.blockState !== 'done' && (
           <form action={unpinBlockAction}>
             <input type="hidden" name="blockId" value={item.blockId!} />
-            <button type="submit" className="text-accent underline underline-offset-2" title="Let the next plan move or replace this block">
+            <button type="submit" className="text-accent underline underline-offset-2" title="Let planning move this block again">
               Unpin
             </button>
           </form>
