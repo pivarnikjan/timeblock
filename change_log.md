@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-10-04 | v0.16 | [E25 · Missed work and the Dashboard](#e25--missed-work-and-the-dashboard) | TB-094 – TB-096 | Done on the desktop |
 | 2026-10-04 | v0.15 | [E24 · Plan once, edit in place](#e24--plan-once-edit-in-place) | TB-090 – TB-093 | Done on the desktop |
 | 2026-10-01 | v0.14 | [E23 · Event categories](#e23--event-categories) | TB-088 – TB-089 | Done, desktop and phone |
 | 2026-09-30 | v0.13 | [E22 · The whole planner on the phone](#e22--the-whole-planner-on-the-phone) | TB-087 | In progress — shared planner done; the phone screens follow in timeblock-mobile |
@@ -46,6 +47,76 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-10-04 · v0.16 — Missed work and the Dashboard
+
+**Theme.** Say "I didn't get to it" and the work finds its next slot — and see
+which tasks get done on the first try and which take several.
+
+**Upgrade notes.** Migration `0013_task_reschedules` adds the
+`task_reschedules` table, synced with the phone. Until the phone's copy of
+`packages/core` is moved forward, its sync reports the desktop as "a newer
+TimeBlock"; nothing is lost either way. Slips are counted from now on — earlier
+missed work left no record.
+
+## E25 · Missed work and the Dashboard
+
+> The workshop prep slipped three times this month; the reading never does.
+
+### TB-094 · Didn't get to it — find the next slot
+*As a planner, I want to say a block's work did not happen and have it moved to
+the next free time, without re-planning everything.*
+
+Acceptance criteria
+- [x] **↻ Didn't get to it — find the next slot** in the panel of a block with
+      unticked work (not one kept as history).
+- [x] Its unticked work goes to the first free slot in its window from now on
+      (after the block's own end when missed ahead of time), around meetings,
+      vacations and every other block, within three months; nothing else moves.
+      It is pinned there; a committed block's Google event moves with it.
+- [x] Ticked work stays where it happened: the rest gets a block of its own
+      (committed too, if the original was), and the original's Google event
+      then lists only the work done there.
+- [x] A course stays in order: its later blocks that would now come first move
+      after it, each to the next free slot — a session to a later day.
+- [x] No slot: nothing changes, and it says so. The panel follows the work to
+      its new place and says how many times each task has now been rescheduled.
+
+### TB-095 · Every slip is counted once
+*As a planner, I want how often each task was rescheduled stored, so I can see
+which work needs several tries.*
+
+Acceptance criteria
+- [x] One `task_reschedules` row per task per slip — task, block, from, to,
+      minutes, reason (`missed` or `review`) — never edited; deleting a task
+      deletes its rows. Synced with the phone; append-only, so devices never
+      overwrite each other's counts.
+- [x] Work left unticked in the morning review counts as a slip. A slip is
+      identified by task, block and scheduled time, so reviewing a day twice, or
+      pressing the button on a block the review counted, adds nothing.
+- [x] Moving blocks by hand, Reschedule… and a course's modules moving along
+      are not slips.
+- [x] A block's panel shows **↻ N** beside each task rescheduled N times.
+
+### TB-096 · Dashboard: most rescheduled tasks
+*As a planner, I want a Dashboard listing the tasks I reschedule most.*
+
+Acceptance criteria
+- [x] **Dashboard** in the top navigation: **Most rescheduled tasks** over the
+      last 30 days, 90 days (default) or all time — rank, task, its goal, done or
+      open, times rescheduled (with a bar), minutes slipped, last slip. Top 25.
+- [x] An empty period says everything was done on the first try. The top
+      navigation scrolls instead of overflowing on narrow screens.
+
+Where to look: `packages/core/src/db/schema.ts` (`taskReschedules`),
+`drizzle/0013_task_reschedules.sql`, `sync/tables.ts`,
+`store/reschedules.ts`, `planner.ts` (`rescheduleMissed`),
+`operations/plan.ts` (`reviewDay`, `missBlock`), `insights.ts` ·
+`app/actions/plan.ts` (`missBlockAction`), `app/dashboard/page.tsx` ·
+`components/calendar/missed-button.tsx`, `event-panel.tsx` ·
+`lib/reschedules.test.ts`.
 
 ---
 

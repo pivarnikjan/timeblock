@@ -136,10 +136,20 @@ beside the calendar (the grid stays where it is; **×** closes it):
 
   The three checkboxes are remembered on this computer, per event — for a
   repeating event, for every repeat — so they work on read-only calendars too.
-- **A TimeBlock block** shows its tasks and minutes, whether it is a draft or in
-  Google, and whether you pinned it, with **Tick off in the day →**, **Unpin**,
-  and **Delete block** (its Google event too, if committed; its tasks are
-  planned again next time). A block with ticked-off work stays as history.
+- **A TimeBlock block** shows its tasks and minutes (with **↻ N** beside a task
+  rescheduled N times so far), whether it is a draft or in Google, and whether
+  you pinned it, with **Tick off in the day →**, **Unpin**, and **Delete block**
+  (its Google event too, if committed; its tasks are planned again next time).
+  A block with ticked-off work stays as history.
+- **↻ Didn't get to it — find the next slot** (on a block with work not yet
+  ticked off) is for work that did not happen in its time. The unticked work
+  moves to the **first free slot in its window** from now on — after the
+  block's own end, if you know ahead of time — around meetings, vacations and
+  every other block, and nothing else moves. It is pinned there, and a committed
+  block's Google event moves with it. Tick off what you did first: ticked work
+  stays where it happened and the rest gets a block of its own. A course stays
+  in order — its later modules that would now come first move after it (a
+  session to a later day). Each task's slip is counted for the **Dashboard**.
 
 **Set vacation.** The **🏖 Set vacation** button beside the view switcher opens
 a form: from and until (date and time — an end of 23:59 covers the whole last
@@ -393,6 +403,22 @@ undecided ones, and the event's panel asks too. Answer either place:
 
 Events a vacation already covers, declined ones and TimeBlock's own are never
 asked about.
+
+## Dashboard
+
+**Dashboard** (top navigation) shows which work gets done on the first try and
+which keeps slipping. **Most rescheduled tasks** lists the tasks rescheduled
+most often over the last 30 days, the last 90 days or all time: each with the
+goal it serves, whether it is done, how many times it was rescheduled, the
+minutes that slipped, and when it last did.
+
+A **reschedule** is work not done in its scheduled time: **Didn't get to it** on
+a block, or work left unticked in the morning review of the day it was planned
+for. Each slip is stored once (the same block at the same time is never counted
+twice — reviewing a day again, or pressing the button on a block the review
+already counted, adds nothing), in the `task_reschedules` table, which syncs
+with the phone. Moving blocks yourself, *Reschedule…* and a course's later
+modules moving along are planning, not slips, and do not count.
 
 ## Importing tasks from CSV
 

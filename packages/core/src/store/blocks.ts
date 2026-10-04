@@ -190,6 +190,12 @@ export async function moveBlock(db: TimeblockDb, id: number, date: string, start
     .where(eq(blocks.id, id));
 }
 
+/** Takes segments out of their block — work that moved to a block of its own. */
+export async function removeSegments(db: TimeblockDb, ids: number[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.delete(blockSegments).where(inArray(blockSegments.id, ids));
+}
+
 /**
  * Gives a block a new time and length by hand, with its segments' new minutes
  * (by segment id; 0 takes a segment off). It is pinned from then on.

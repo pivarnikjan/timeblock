@@ -239,6 +239,42 @@ export const eventCategories = sqliteTable('event_categories', {
   sortOrder: integer('sort_order').notNull().default(0),
 });
 
+/**
+ * Why a task's work slipped: `missed` — "Didn't get to it" on a block, which
+ * moved it to the next free slot; `review` — left unticked in the morning
+ * review of the day it was planned for.
+ */
+export const RESCHEDULE_REASONS = ['missed', 'review'] as const;
+export type RescheduleReason = (typeof RESCHEDULE_REASONS)[number];
+
+/**
+ * Every time a task's planned work was not done in its scheduled time — one
+ * row per task per slip, never edited. How often a task was rescheduled is the
+ * number of its rows; append-only, so two devices recording slips at once
+ * both keep theirs.
+ */
+export const taskReschedules = sqliteTable(
+  'task_reschedules',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }).$defaultFn(() => newId()),
+    taskId: integer('task_id').notNull(),
+    /** The block the work was scheduled in. */
+    blockId: integer('block_id').notNull(),
+    /** When it was scheduled (UTC ISO) — with the block, names the slip, so it is recorded once. */
+    fromStartsAt: text('from_starts_at').notNull(),
+    /** Where the work went (UTC ISO); null when it waits for the next plan (a review). */
+    toStartsAt: text('to_starts_at'),
+    /** Minutes of the task that slipped. */
+    minutes: integer('minutes').notNull(),
+    reason: text('reason', { enum: RESCHEDULE_REASONS }).notNull(),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('task_reschedules_slip_idx').on(t.taskId, t.blockId, t.fromStartsAt),
+    index('task_reschedules_created_idx').on(t.createdAt),
+  ],
+);
+
 /** 'review' records that a planned day was looked back on (ticked off) the next morning. */
 export const RITUALS = ['daily', 'weekly', 'monthly', 'yearly', 'review'] as const;
 

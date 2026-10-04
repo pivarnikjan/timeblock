@@ -18,6 +18,7 @@ import {
 import { getSettings } from '@/lib/repo/settings';
 import { syncQuietly } from '@/lib/sync/service';
 import * as ops from '@timeblock/core/operations/plan';
+import type { MissedResult } from '@timeblock/core/planner';
 
 function refresh() {
   revalidatePath('/', 'layout');
@@ -122,6 +123,26 @@ async function runPlanIntent(form: FormData): Promise<PlanCalendarState> {
     else state = { kind: 'planned', summary: await planCalendar() };
     refresh();
     return state;
+  } catch (error) {
+    return { kind: 'error', message: (error as Error).message };
+  }
+}
+
+export type MissedState =
+  | { kind: 'idle' }
+  | { kind: 'moved'; result: MissedResult }
+  | { kind: 'error'; message: string };
+
+/**
+ * "Didn't get to it" in a block's panel: its unticked work moves to the next
+ * free slot in its window (a course's later blocks after it), and each task's
+ * slip is counted for the Dashboard.
+ */
+export async function missBlockAction(_prev: MissedState, form: FormData): Promise<MissedState> {
+  try {
+    const result = await oneAtATime(() => withEnv(ops.missBlock)(num(form, 'blockId')));
+    refresh();
+    return { kind: 'moved', result };
   } catch (error) {
     return { kind: 'error', message: (error as Error).message };
   }

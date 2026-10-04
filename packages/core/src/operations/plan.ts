@@ -2,8 +2,9 @@ import { DateTime } from 'luxon';
 import type { Env } from '../env';
 import { fitSegments, MIN_BLOCK_MIN } from '../blocks';
 import { commitDay, deleteBlockEverywhere, moveEvent, retimeEvent, syncBlockColors } from '../google/writes';
-import { today } from '../planner';
+import { rescheduleMissed, today } from '../planner';
 import * as blockStore from '../store/blocks';
+import { recordSlips } from '../store/reschedules';
 import { completeRitual } from '../store/rituals';
 import { getSettings } from '../store/settings';
 import { syncCompletion } from '../store/tasks';
@@ -28,12 +29,25 @@ export async function completeBlock(env: Env, blockId: number): Promise<void> {
 /**
  * The first step of the morning: say what actually happened on `date`.
  * Checked segments are ticked off; unchecked ones stay open and are planned
- * again with only their remaining minutes.
+ * again with only their remaining minutes — and count as a slip of their task
+ * (see `taskReschedules`; reviewing the same day again counts nothing twice).
  */
 export async function reviewDay(env: Env, date: string, checkedSegmentIds: number[]): Promise<void> {
   await tick(env, checkedSegmentIds, true);
+  const day = await blockStore.listForDate(env.db, date);
+  await recordSlips(
+    env.db,
+    day.flatMap((block) =>
+      block.segments
+        .filter((s) => s.doneAt === null)
+        .map((s) => ({ taskId: s.taskId, blockId: block.id, fromStartsAt: block.startsAt, toStartsAt: null, minutes: s.minutes, reason: 'review' as const })),
+    ),
+  );
   await completeRitual(env.db, 'review', date);
 }
+
+/** "Didn't get to it" on a block: its work moves to the next free slot, and the slip is counted. */
+export const missBlock = rescheduleMissed;
 
 /** Commits the day's drafts to Google, colours its blocks, and records the daily ritual as done. */
 export async function commitDayPlan(env: Env, date: string): Promise<void> {
