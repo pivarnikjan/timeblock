@@ -642,6 +642,20 @@ npm run build         # type-check and production build
 npm run db:generate   # regenerate SQL after editing packages/core/src/db/schema.ts
 ```
 
+**"An Application Control policy has blocked this file" when building.**
+Tailwind's engine is an unsigned native module
+(`tailwindcss-oxide.win32-*.node`), and Windows **Smart App Control** blocks it
+on some machines. Nothing needs switching off: `npm run build` and
+`npm run dev` first run `scripts/ensure-tailwind-engine.cjs`, which notices the
+block, installs Tailwind's WebAssembly engine into `scripts/tailwind-wasm/`
+(once, in the version the project's Tailwind expects — it needs the network
+that one time), and the build then uses it through
+`scripts/tailwind-postcss.cjs`. The stylesheet is the same; where the native
+engine loads, the official `@tailwindcss/postcss` plugin is used as before.
+After adding a top-level source folder with Tailwind classes in it, add it to
+`SOURCES` in that file — the WebAssembly engine only sees the folders listed
+there.
+
 To work on a change: branch, test, push, open a pull request.
 
 ```powershell

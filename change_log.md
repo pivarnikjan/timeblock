@@ -16,7 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
-| 2026-10-05 | v0.17 | [E26 · Done by the clock, and a clean slate](#e26--done-by-the-clock-and-a-clean-slate) | TB-097 – TB-100 | Done on the desktop |
+| 2026-10-05 | v0.17 | [E26 · Done by the clock, and a clean slate](#e26--done-by-the-clock-and-a-clean-slate) | TB-097 – TB-101 | Done on the desktop |
 | 2026-10-04 | v0.16 | [E25 · Missed work and the Dashboard](#e25--missed-work-and-the-dashboard) | TB-094 – TB-096 | Done on the desktop |
 | 2026-10-04 | v0.15 | [E24 · Plan once, edit in place](#e24--plan-once-edit-in-place) | TB-090 – TB-093 | Done on the desktop |
 | 2026-10-01 | v0.14 | [E23 · Event categories](#e23--event-categories) | TB-088 – TB-089 | Done, desktop and phone |
@@ -113,6 +113,26 @@ Acceptance criteria
       unticked, on a day before its session's new day — no longer counts as
       that session being planned: *Plan calendar* and *Generate the day* plan
       the session again, and *Reschedule…* takes the old block off.
+
+### TB-101 · Builds where Smart App Control blocks Tailwind (fix)
+*As the person running TimeBlock on Windows, I want the build to work when
+Windows refuses Tailwind's unsigned native engine, without switching any
+protection off.*
+
+Acceptance criteria
+- [x] `npm run build` / `npm run dev` first check whether Tailwind's native
+      engine loads. Where "An Application Control policy has blocked this
+      file", Tailwind's WebAssembly engine is installed once into
+      `scripts/tailwind-wasm/` (kept out of the project's dependencies: npm
+      refuses a "wasm32 only" package there) in the matching version.
+- [x] The stylesheet is then built with that engine: the plugin reads the
+      source files itself — the WebAssembly engine cannot walk a Windows
+      folder — and Tailwind's own compiler builds the CSS. Where the native
+      engine loads, the official plugin is used unchanged.
+
+Where to look: `scripts/tailwind-engine.cjs`, `scripts/ensure-tailwind-engine.cjs`,
+`scripts/tailwind-postcss.cjs`, `postcss.config.mjs`, `package.json`
+(`predev`, `prebuild`).
 
 Where to look: `packages/core/src/operations/plan.ts` (`completeElapsed`,
 `clearPlan`), `google/writes.ts` (`clearFrom`), `store/blocks.ts`

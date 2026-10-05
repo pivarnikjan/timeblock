@@ -4,7 +4,9 @@
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
   "scripts": {
+    "predev": "node scripts/ensure-tailwind-engine.cjs",
     "dev": "next dev --port 4321",
+    "prebuild": "node scripts/ensure-tailwind-engine.cjs",
     "build": "next build",
     "start": "next start --port 4321",
     "lint": "eslint",
