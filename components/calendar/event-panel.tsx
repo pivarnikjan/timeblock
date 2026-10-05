@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { deleteEventAction, setEventMarkAction, setNotVacationAction, toggleEventAction } from '@/app/actions/calendar';
-import { deleteBlockAction, unpinBlockAction } from '@/app/actions/plan';
+import { completeBlockAction, deleteBlockAction, toggleSegmentAction, unpinBlockAction } from '@/app/actions/plan';
 import { deleteVacationAction } from '@/app/actions/vacation';
 import { ConfirmButton } from '@/components/confirm-button';
 import { formatMinutes } from '@timeblock/core/hierarchy';
@@ -242,7 +242,9 @@ function Mark({ label, help, checked, fields }: { label: string; help: string; c
 async function BlockDetails({ data, item, close }: { data: CalendarData; item: CalendarItem; close: string }) {
   const state = item.blockState === 'draft' ? 'Draft — not in Google yet' : item.blockState === 'done' ? 'Kept as history' : 'In Google Calendar';
   const counts = await rescheduleCounts([...new Set(item.segments.map((s) => s.taskId))]);
-  const missable = item.blockId !== null && item.blockState !== 'done' && item.segments.some((s) => !s.done);
+  const anyOpen = item.segments.some((s) => !s.done);
+  const missable = item.blockId !== null && item.blockState !== 'done' && anyOpen;
+  const ended = item.end <= data.now;
   return (
     <>
       <p className="text-xs text-muted">
@@ -252,9 +254,22 @@ async function BlockDetails({ data, item, close }: { data: CalendarData; item: C
       <ul className="space-y-1 border-t border-border pt-3">
         {item.segments.map((s, i) => (
           <li key={i} className="flex items-center gap-2">
-            <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] ${s.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-border'}`}>
-              {s.done ? '✓' : ''}
-            </span>
+            <form action={toggleSegmentAction} className="flex">
+              <input type="hidden" name="segmentId" value={s.id} />
+              <input type="hidden" name="done" value={s.done ? '0' : '1'} />
+              <button
+                type="submit"
+                role="checkbox"
+                aria-checked={s.done}
+                aria-label={`${s.title} — ${s.done ? 'done; untick' : 'mark as done'}`}
+                title={s.done ? 'Done — click to untick' : 'Mark as done'}
+                className={`flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border text-[10px] hover:border-emerald-500 ${
+                  s.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-border'
+                }`}
+              >
+                {s.done ? '✓' : ''}
+              </button>
+            </form>
             <span className={`min-w-0 flex-1 ${s.done ? 'text-muted line-through' : ''}`}>{s.title}</span>
             {(counts.get(s.taskId) ?? 0) > 0 && (
               <span className="text-xs tabular-nums text-amber-600" title="Times this task was rescheduled — see the Dashboard">
@@ -265,6 +280,21 @@ async function BlockDetails({ data, item, close }: { data: CalendarData; item: C
           </li>
         ))}
       </ul>
+      {anyOpen && item.segments.length > 1 && (
+        <form action={completeBlockAction}>
+          <input type="hidden" name="blockId" value={item.blockId!} />
+          <button type="submit" className="text-xs text-accent underline underline-offset-2">
+            Mark all done
+          </button>
+        </form>
+      )}
+      <p className="text-xs text-muted">
+        {item.blockState === 'draft'
+          ? 'Click a box to tick work off. A draft is not ticked off by itself — commit the plan for that.'
+          : !anyOpen && ended
+            ? 'Ticked off when its time ended. Did not happen? Untick it — then “Didn’t get to it” finds its next slot.'
+            : 'Click a box to tick work off. Once its time has passed, it is ticked off by itself.'}
+      </p>
       {missable && (
         <div className="border-t border-border pt-3">
           <MissedButton blockId={item.blockId!} zone={data.zone} view={data.range.view} />

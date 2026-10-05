@@ -12,7 +12,7 @@ import { MultiDayReviewList } from '@/components/calendar/multi-day-review';
 import { vacationConflicts } from '@/lib/calendar/vacation-conflicts';
 import { parseView } from '@timeblock/core/calendar/views';
 import { busySpans } from '@/lib/google/calendar';
-import { loadDay } from '@/lib/planner';
+import { completeElapsed, loadDay } from '@/lib/planner';
 import * as blockRepo from '@/lib/repo/blocks';
 import { getVacation } from '@/lib/repo/vacations';
 import { getSettings } from '@/lib/repo/settings';
@@ -29,12 +29,20 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
   const asked = typeof params.date === 'string' ? params.date : null;
   const anchor = asked && DateTime.fromISO(asked, { zone }).isValid ? asked : nowIn(zone).toISODate()!;
 
+  // Work whose scheduled time has passed is done, before anything is drawn.
+  await completeElapsed();
+
   const askedItem = typeof params.item === 'string' ? params.item : null;
-  const [data, draftDates, reviews] = await Promise.all([
+  const todayDate = nowIn(zone).toISODate()!;
+  const [data, draftDates, reviews, planned] = await Promise.all([
     loadCalendarView(view, anchor, askedItem),
-    blockRepo.draftDatesFrom(nowIn(zone).toISODate()!),
+    blockRepo.draftDatesFrom(todayDate),
     loadMultiDayReviews(settings),
+    blockRepo.listFrom(todayDate),
   ]);
+  // What "Clear plan" would take off: every block from today on with work not ticked off yet.
+  const clearable = planned.filter((b) => (b.state === 'draft' || b.state === 'synced') && b.segments.some((s) => s.doneAt === null));
+  const planOverview = { blocks: clearable.length, committed: clearable.filter((b) => b.state === 'synced').length };
   // The clicked item, if it is still there (a deleted or hidden one simply closes the panel).
   const selected = data.items.find((i) => i.id === askedItem) ?? null;
   // An open vacation lists what is already scheduled during it (read for its whole span, not just this view).
@@ -56,7 +64,7 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
   return (
     <div className="space-y-5">
       <CalendarHeader data={data} />
-      <PlanCalendarBar drafts={drafts} googleConnected={data.connection.status === 'connected'} />
+      <PlanCalendarBar drafts={drafts} planned={planOverview} googleConnected={data.connection.status === 'connected'} />
       <MultiDayReviewList data={data} reviews={reviews} />
 
       {(data.connection.status === 'not-configured' || data.connection.status === 'not-connected') && (

@@ -17,6 +17,7 @@ import {
 } from '@/lib/planner';
 import { getSettings } from '@/lib/repo/settings';
 import { syncQuietly } from '@/lib/sync/service';
+import type { ClearResult } from '@timeblock/core/google/writes';
 import * as ops from '@timeblock/core/operations/plan';
 import type { MissedResult } from '@timeblock/core/planner';
 
@@ -24,8 +25,14 @@ function refresh() {
   revalidatePath('/', 'layout');
 }
 
-/** Plans start from what the phone knows too — above all, work ticked off there. */
-const pullFromPhone = () => syncQuietly(30_000);
+/**
+ * Plans start from what the phone knows too — above all, work ticked off there
+ * — and from what has happened since: blocks whose time has passed are done.
+ */
+const pullFromPhone = async () => {
+  await syncQuietly(30_000);
+  await withEnv(ops.completeElapsed)();
+};
 
 /**
  * Planning, committing and rescheduling run one at a time: two overlapping runs
@@ -94,6 +101,7 @@ export type PlanCalendarState =
   | { kind: 'planned'; summary: CalendarPlanSummary }
   | { kind: 'committed'; result: CommitRangeResult }
   | { kind: 'discarded'; blocks: number }
+  | { kind: 'cleared'; result: ClearResult }
   | { kind: 'reschedule-preview'; summary: RescheduleSummary }
   | { kind: 'rescheduled'; result: RescheduleResult }
   | { kind: 'error'; message: string };
@@ -101,7 +109,8 @@ export type PlanCalendarState =
 /**
  * The Calendar's plan bar: one form, several buttons. "plan" lays every task
  * out from today on as drafts; "commit" sends those drafts to Google;
- * "discard" throws the drafts away (blocks placed by hand included).
+ * "discard" throws the drafts away (blocks placed by hand included); "clear"
+ * takes the whole plan from today on off the calendar and out of Google.
  * "reschedule-preview" counts the tasks a reschedule would move, "reschedule"
  * (the confirmation) moves them, and "cancel" drops the preview.
  */
@@ -115,10 +124,11 @@ async function runPlanIntent(form: FormData): Promise<PlanCalendarState> {
     const from = today(await getSettings());
     let state: PlanCalendarState;
     if (intent === 'cancel') return { kind: 'idle' };
-    if (intent === 'plan' || intent === 'commit' || intent === 'reschedule-preview') await pullFromPhone();
+    if (intent === 'plan' || intent === 'commit' || intent === 'reschedule-preview' || intent === 'clear') await pullFromPhone();
     if (intent === 'reschedule-preview') return { kind: 'reschedule-preview', summary: await previewReschedule() };
     if (intent === 'commit') state = { kind: 'committed', result: await commitFrom(from) };
     else if (intent === 'discard') state = { kind: 'discarded', blocks: await withEnv(ops.discardDrafts)() };
+    else if (intent === 'clear') state = { kind: 'cleared', result: await withEnv(ops.clearPlan)() };
     else if (intent === 'reschedule') state = { kind: 'rescheduled', result: await reschedule() };
     else state = { kind: 'planned', summary: await planCalendar() };
     refresh();

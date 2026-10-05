@@ -140,4 +140,10 @@ export const MIGRATIONS: readonly Migration[] = [
       "CREATE INDEX `task_reschedules_created_idx` ON `task_reschedules` (`created_at`);",
     ],
   },
+  {
+    name: "0014_segment_kept_open.sql",
+    statements: [
+      "ALTER TABLE `block_segments` ADD `kept_open` integer DEFAULT false NOT NULL;",
+    ],
+  },
 ];

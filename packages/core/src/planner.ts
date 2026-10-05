@@ -214,6 +214,8 @@ interface SessionPlan {
   sessions: SessionDays;
   redo: Set<number>;
   restarts: SessionRestart[];
+  /** Every session of a week that starts again — the ones not done yet included. */
+  restarted: Set<number>;
   /**
    * A week's other tasks (its check-in, say) and the day they may start: when
    * their week's first session is. A week that moves takes them along.
@@ -268,7 +270,9 @@ function sessionPlan(
         heldOn: remainingMin > 0 ? (held.get(t.id) ?? null) : null,
       };
     });
-  if (chainTasks.length === 0) return { sessions: { ids: new Set(), days: new Map() }, redo: new Set(), restarts: [], companions: new Map() };
+  if (chainTasks.length === 0) {
+    return { sessions: { ids: new Set(), days: new Map() }, redo: new Set(), restarts: [], restarted: new Set(), companions: new Map() };
+  }
 
   const windowOf = new Map(chainTasks.map((c) => [c.id, toPlannable(ctx.tasks.find((t) => t.id === c.id)!, ctx).windowId]));
   const memo = new Map<string, boolean>();
@@ -322,8 +326,26 @@ function sessionPlan(
     sessions: { ids: new Set(chainTasks.map((c) => c.id)), days: agenda.days },
     redo: agenda.redo,
     restarts: agenda.restarts.map((r) => ({ first: titleOf.get(r.taskIds[0]) ?? '', on: r.on, redone: r.redone.length })),
+    restarted: new Set(agenda.restarts.flatMap((r) => r.taskIds)),
     companions,
   };
+}
+
+/**
+ * Blocks left behind by a week of sessions that starts again: they hold a
+ * session of that week, unticked, on a day before the one it is now planned
+ * on. Such a block is the interrupted attempt, not the plan — its session is
+ * planned again with the rest of its week, instead of counting as placed.
+ */
+function leftBehind(blocks: blockStore.BlockWithSegments[], plan: Pick<SessionPlan, 'restarted' | 'sessions'>): Set<number> {
+  const out = new Set<number>();
+  if (plan.restarted.size === 0) return out;
+  for (const b of blocks) {
+    if (b.state === 'done') continue;
+    const stale = b.segments.some((s) => s.doneAt === null && plan.restarted.has(s.taskId) && b.date < (plan.sessions.days.get(s.taskId) ?? '9999-12-31'));
+    if (stale) out.add(b.id);
+  }
+  return out;
 }
 
 /** The sessions a set of blocks holds, by the block's date — blocks that stay where they are. */
@@ -383,9 +405,14 @@ export async function generateDay(env: Env, date: string): Promise<Plan> {
 
   const busy = [...calendar.busy, ...reservedSpans(ctx, date, blocks, staysPut)];
   // Sessions: only the one due today, first in its window. Later days' meetings are not known here.
-  const { sessions, redo, companions } = sessionPlan(ctx, date, 7, new Map([[date, busy]]), heldSessions(ctx, blocks.filter(isHeld)));
+  const session = sessionPlan(ctx, date, 7, new Map([[date, busy]]), heldSessions(ctx, blocks.filter(isHeld)));
+  const { sessions, redo, companions } = session;
+  const stale = leftBehind(blocks, session);
   const redone = forecastableFrom(ctx, date, redo).filter((t) => redo.has(t.id));
-  const tasks = withoutHeld([...schedulableOn(ctx, date).filter((t) => !redo.has(t.id)), ...redone], heldMinutes(blocks, date))
+  const tasks = withoutHeld(
+    [...schedulableOn(ctx, date).filter((t) => !redo.has(t.id)), ...redone],
+    heldMinutes(blocks.filter((b) => !stale.has(b.id)), date),
+  )
     .filter((t) => !sessions.ids.has(t.id) || sessions.days.get(t.id) === date)
     .filter((t) => (companions.get(t.id) ?? date) <= date)
     .map((t) => ({ ...t, lead: sessions.ids.has(t.id) }));
@@ -478,9 +505,11 @@ export async function planCalendar(env: Env): Promise<CalendarPlanSummary> {
   }
 
   const heldBlocks = blocks.filter(isHeld);
-  const { sessions, redo, restarts, companions } = sessionPlan(ctx, from, PLAN_CALENDAR_DAYS, busyByDate, heldSessions(ctx, heldBlocks));
+  const session = sessionPlan(ctx, from, PLAN_CALENDAR_DAYS, busyByDate, heldSessions(ctx, heldBlocks));
+  const { sessions, redo, restarts, companions } = session;
+  const stale = leftBehind(blocks, session);
   const forecastable = anchored(forecastableFrom(ctx, from, redo), companions);
-  const tasks = withoutHeld(forecastable, heldMinutes(blocks, from));
+  const tasks = withoutHeld(forecastable, heldMinutes(blocks.filter((b) => !stale.has(b.id)), from));
 
   const plan = planRange(from, PLAN_CALENDAR_DAYS, ctx.shape, ctx.specs, tasks, busyByDate, ctx.closures, sessions);
   await blockStore.replaceDraftsFrom(
@@ -637,19 +666,34 @@ async function proposeReschedule(env: Env): Promise<RescheduleProposal> {
     }
   }
 
-  const busyByDate = new Map(calendar.busy);
-  const addBusy = (date: string, span: BusySpan) => busyByDate.set(date, [...(busyByDate.get(date) ?? []), span]);
-  addBusy(from, now);
-  for (const block of staying) addBusy(block.date, { start: block.startsAt, end: block.endsAt });
+  /** The calendar and the sessions' days, given the blocks that stay where they are. */
+  const around = (kept: blockStore.BlockWithSegments[]) => {
+    const busyByDate = new Map(calendar.busy);
+    const addBusy = (date: string, span: BusySpan) => busyByDate.set(date, [...(busyByDate.get(date) ?? []), span]);
+    addBusy(from, now);
+    for (const block of kept) addBusy(block.date, { start: block.startsAt, end: block.endsAt });
 
-  // Open work in blocks that stay is already planned; only the rest is placed again.
-  const held = new Map<number, number>();
-  for (const block of staying) {
-    if (block.state === 'done' || blockStore.isLocked(block)) continue;
-    for (const s of block.segments) held.set(s.taskId, (held.get(s.taskId) ?? 0) + s.minutes);
+    // Open work in blocks that stay is already planned; only the rest is placed again.
+    const held = new Map<number, number>();
+    for (const block of kept) {
+      if (block.state === 'done' || blockStore.isLocked(block)) continue;
+      for (const s of block.segments) held.set(s.taskId, (held.get(s.taskId) ?? 0) + s.minutes);
+    }
+    const heldDays = heldSessions(ctx, kept.filter((b) => b.state !== 'done' && !blockStore.isLocked(b)));
+    return { busyByDate, held, session: sessionPlan(ctx, from, PLAN_CALENDAR_DAYS, busyByDate, heldDays) };
+  };
+  let layout = around(staying);
+  // A week of sessions that starts again takes the blocks of its interrupted attempt along.
+  const stale = leftBehind(staying.filter((b) => !blockStore.isLocked(b)), layout.session);
+  if (stale.size > 0) {
+    movable.push(...staying.filter((b) => stale.has(b.id)));
+    const kept = staying.filter((b) => !stale.has(b.id));
+    staying.length = 0;
+    staying.push(...kept);
+    layout = around(staying);
   }
-  const heldDays = heldSessions(ctx, staying.filter((b) => b.state !== 'done' && !blockStore.isLocked(b)));
-  const { sessions, redo, restarts, companions } = sessionPlan(ctx, from, PLAN_CALENDAR_DAYS, busyByDate, heldDays);
+  const { busyByDate, held } = layout;
+  const { sessions, redo, restarts, companions } = layout.session;
   const tasks = withoutHeld(anchored(forecastableFrom(ctx, from, redo), companions), held);
 
   const plan = planRange(from, PLAN_CALENDAR_DAYS, ctx.shape, ctx.specs, tasks, busyByDate, ctx.closures, sessions);

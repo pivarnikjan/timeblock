@@ -348,6 +348,53 @@ export async function clearDay(env: Env, date: string): Promise<number> {
   return removed;
 }
 
+export interface ClearResult {
+  /** Blocks taken off the calendar. */
+  removed: number;
+  /** Of those, how many had an event in Google Calendar, deleted with them. */
+  events: number;
+  /** Blocks with ticked-off work, kept as history with only that work in them. */
+  kept: number;
+}
+
+/**
+ * "Clear plan": takes every planned block from the local date `from` on off the
+ * calendar — drafts, committed blocks (their Google events too) and blocks
+ * placed by hand — so priorities can change and everything be planned afresh.
+ * Work already ticked off is never touched: a fully ticked block stays, and a
+ * partly ticked one keeps just its ticked work, as history.
+ *
+ * Google goes first, block by block, so a refusal halfway leaves the rest of
+ * the plan exactly as it was; running it again carries on.
+ */
+export async function clearFrom(env: Env, from: string): Promise<ClearResult> {
+  const result: ClearResult = { removed: 0, events: 0, kept: 0 };
+  const open = (await blockStore.listFrom(env.db, from)).filter(
+    (b) => (b.state === 'draft' || b.state === 'synced') && b.segments.some((s) => s.doneAt === null),
+  );
+  if (open.length === 0) return result;
+
+  const committed = open.filter((b) => b.state === 'synced' && b.googleEventId);
+  if (committed.length > 0 && env.google.status() !== 'connected') {
+    throw new Error(`${committed.length} of these blocks are in Google Calendar — connect Google Calendar in Settings first, so their events can be removed too.`);
+  }
+  const calendarId = committed.length > 0 ? await ensureTargetCalendar(env) : null;
+
+  for (const block of open) {
+    if (blockStore.isLocked(block)) {
+      // Its Google event stays, now listing only the work that was done.
+      if (calendarId && block.googleEventId) await retimeEvent(env, { ...block, segments: block.segments.filter((s) => s.doneAt !== null) });
+      await blockStore.retireBlock(env.db, block);
+      result.kept += 1;
+      continue;
+    }
+    if (calendarId && block.googleEventId && (await deleteEvent(env, calendarId, block.googleEventId))) result.events += 1;
+    await blockStore.deleteBlock(env.db, block.id);
+    result.removed += 1;
+  }
+  return result;
+}
+
 /**
  * Brings a vacation's Google copy in line with it: created when wanted and
  * missing, updated when wanted and present, removed when no longer wanted.

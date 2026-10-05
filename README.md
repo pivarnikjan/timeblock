@@ -61,7 +61,7 @@ holds the Week, Month and Year screens behind one tab bar (their addresses stay
 | `/year` | Once a year | Set the 40,000ft goals. Expand one to drill down through its months, weeks and tasks, each with a progress bar and forecast. A goal may **run over several years** (*Runs until* in its form): it is listed on each of them, marked 📅 2026 – 2027, with that year's months underneath. |
 | `/month` | First session of a month | Define outcomes for the month's goal. See the month's weeks (empty ones read as buffer) and each outcome's backlog. |
 | `/week` | First session of a week | Choose the week's priorities, **move backlog tasks into them**, quick-add tasks ("title + 1h 25m"). |
-| `/calendar` → **Today** | Every morning | **1. Review yesterday** (tick what you finished) → 2. generate → 3. commit to Google. Tick blocks off during the day. |
+| `/calendar` → **Today** | Every morning | **1. Review yesterday** (only when something is still open) → 2. generate → 3. commit to Google. Committed blocks tick themselves off when their time has passed — untick what did not happen. |
 
 The Calendar's **Today** view shows which reviews are outstanding — keyed on the period, so a Monday
 lost to meetings still surfaces the weekly review on Tuesday.
@@ -138,9 +138,17 @@ beside the calendar (the grid stays where it is; **×** closes it):
   repeating event, for every repeat — so they work on read-only calendars too.
 - **A TimeBlock block** shows its tasks and minutes (with **↻ N** beside a task
   rescheduled N times so far), whether it is a draft or in Google, and whether
-  you pinned it, with **Tick off in the day →**, **Unpin**, and **Delete block**
-  (its Google event too, if committed; its tasks are planned again next time).
-  A block with ticked-off work stays as history.
+  you pinned it, with **Unpin** and **Delete block** (its Google event too, if
+  committed; its tasks are planned again next time). A block with ticked-off
+  work stays as history.
+- **Ticking off.** The box beside each task is a checkbox: click it to tick the
+  work off, click again to untick; **Mark all done** ticks the whole block.
+  You rarely need to: **a committed block's work is ticked off by itself once
+  its time has passed**, dated to the block's end. Two things stay open — work
+  you unticked by hand ("that did not happen"), until you tick it again or move
+  it; and work that slipped and was planned again later (the later block is the
+  plan, so the earlier one is not counted as well). Drafts never tick
+  themselves off.
 - **↻ Didn't get to it — find the next slot** (on a block with work not yet
   ticked off) is for work that did not happen in its time. The unticked work
   moves to the **first free slot in its window** from now on — after the
@@ -299,7 +307,11 @@ plan, in date order, across its months and phases:
 3. **An interrupted week starts again.** If a week's program cannot be finished
    in the week it began — you leave on Wednesday — it is done again from its
    first session the next week it fits, **the sessions already done included**,
-   and every later week moves back by the same amount. *Plan calendar* and
+   and every later week moves back by the same amount. Sessions tick themselves
+   off when their time has passed, so a week is only interrupted when you say
+   so — you untick a session, or press *Didn't get to it* and it no longer fits
+   in that week. A block left over from the interrupted week does not stand in
+   for its session: the session is planned again with the rest of its week. *Plan calendar* and
    *Reschedule…* say so: "↻ The week starting with Training A · week 1 … starts
    again on Mon 5 Oct — 2 sessions already done are done again". The sessions
    done the first time keep their ticks as history.
@@ -324,6 +336,13 @@ on, one after another, until every scheduled task has a place:
   goal is done: work from later weeks is pulled forward rather than waiting for
   its week, earliest deadline first. Month backlogs and loose tasks are left out (the summary says how many) until you move them into
   a week or mark them active.
+- **Clear plan…** takes everything planned from today on off the calendar —
+  drafts, committed blocks (their Google events are deleted) and blocks you
+  placed by hand — after a confirmation that says how many. Use it when
+  priorities changed: clear, change the priorities (Tasks, or a CSV import),
+  then **Plan calendar** lays everything out afresh. Your tasks are not touched;
+  work already ticked off stays (a partly ticked block keeps just that work),
+  and so do vacations.
 - **Never twice.** Work that already has a block — committed to Google or
   placed by hand — counts as planned: only what has no block yet is planned,
   so running *Plan calendar* again with nothing changed gives the same drafts,
@@ -622,6 +641,20 @@ npm test              # scheduler, hierarchy, CSV import, database bridge
 npm run build         # type-check and production build
 npm run db:generate   # regenerate SQL after editing packages/core/src/db/schema.ts
 ```
+
+**"An Application Control policy has blocked this file" when building.**
+Tailwind's engine is an unsigned native module
+(`tailwindcss-oxide.win32-*.node`), and Windows **Smart App Control** blocks it
+on some machines. Nothing needs switching off: `npm run build` and
+`npm run dev` first run `scripts/ensure-tailwind-engine.cjs`, which notices the
+block, installs Tailwind's WebAssembly engine into `scripts/tailwind-wasm/`
+(once, in the version the project's Tailwind expects — it needs the network
+that one time), and the build then uses it through
+`scripts/tailwind-postcss.cjs`. The stylesheet is the same; where the native
+engine loads, the official `@tailwindcss/postcss` plugin is used as before.
+After adding a top-level source folder with Tailwind classes in it, add it to
+`SOURCES` in that file — the WebAssembly engine only sees the folders listed
+there.
 
 To work on a change: branch, test, push, open a pull request.
 

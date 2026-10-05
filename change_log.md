@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-10-05 | v0.17 | [E26 · Done by the clock, and a clean slate](#e26--done-by-the-clock-and-a-clean-slate) | TB-097 – TB-101 | Done on the desktop |
 | 2026-10-04 | v0.16 | [E25 · Missed work and the Dashboard](#e25--missed-work-and-the-dashboard) | TB-094 – TB-096 | Done on the desktop |
 | 2026-10-04 | v0.15 | [E24 · Plan once, edit in place](#e24--plan-once-edit-in-place) | TB-090 – TB-093 | Done on the desktop |
 | 2026-10-01 | v0.14 | [E23 · Event categories](#e23--event-categories) | TB-088 – TB-089 | Done, desktop and phone |
@@ -47,6 +48,99 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-10-05 · v0.17 — Done by the clock, and a clean slate
+
+**Theme.** Work is done when its time has passed unless you say otherwise, and
+when priorities change the whole plan can be cleared and laid out again.
+
+**Upgrade notes.** Migration `0014_segment_kept_open` adds
+`block_segments.kept_open`. On first start, past committed blocks never ticked
+off are ticked — except work that was planned again in a later block, which
+stays open. Planning behaviour changes: *Clear plan* deletes Google events.
+
+## E26 · Done by the clock, and a clean slate
+
+> I did the training; I should not have to tell the app. And when the
+> priorities change, I want to start the calendar over.
+
+### TB-097 · Work is done when its time has passed
+*As a planner, I want a committed block's work marked complete once its
+scheduled time is over, so that progress follows the calendar by default.*
+
+Acceptance criteria
+- [x] A committed block that has ended has its unticked work ticked off, dated
+      to the block's end; its tasks' status follows. Runs when the Calendar
+      loads, before planning, committing, rescheduling and clearing, and every
+      minute while the server runs. Running it again changes nothing.
+- [x] Work unticked by hand is kept open (`kept_open`) until it is ticked
+      again or its block gets a new time (moved, resized, or *Didn't get to
+      it*).
+- [x] Work that slipped and was planned again is not ticked: when a task has
+      more unticked minutes planned than it has left, its latest blocks count.
+- [x] Drafts never complete by themselves.
+
+### TB-098 · Tick off in the block's panel (fix)
+*As a planner, I want to mark a task complete where I am looking at it.*
+
+Acceptance criteria
+- [x] The boxes in a block's panel are checkboxes — tick and untick — with
+      **Mark all done** for a block of several tasks. Before, they only showed
+      the state and ticking meant opening the day.
+
+### TB-099 · Clear plan
+*As a planner, I want to unassign everything planned from today on, so that I
+can change priorities and plan the calendar afresh.*
+
+Acceptance criteria
+- [x] **Clear plan…** beside *Plan calendar*, after a confirmation with the
+      number of blocks and of Google events: every block from today on with
+      unticked work goes — drafts, committed (Google event deleted first, so a
+      refusal leaves the rest untouched) and pinned.
+- [x] Ticked work stays: a fully ticked block is untouched, a partly ticked one
+      keeps only its ticked work as history. Tasks and vacations are not
+      touched; the next *Plan calendar* places everything open again.
+- [x] With committed blocks and Google disconnected, it refuses and says why.
+
+### TB-100 · A restarted week plans all its sessions (fix)
+*As someone following a training plan, I want a week that starts again to hold
+every session, so that Friday's is not missing.*
+
+Acceptance criteria
+- [x] When a program week starts again, a block of the interrupted attempt —
+      unticked, on a day before its session's new day — no longer counts as
+      that session being planned: *Plan calendar* and *Generate the day* plan
+      the session again, and *Reschedule…* takes the old block off.
+
+### TB-101 · Builds where Smart App Control blocks Tailwind (fix)
+*As the person running TimeBlock on Windows, I want the build to work when
+Windows refuses Tailwind's unsigned native engine, without switching any
+protection off.*
+
+Acceptance criteria
+- [x] `npm run build` / `npm run dev` first check whether Tailwind's native
+      engine loads. Where "An Application Control policy has blocked this
+      file", Tailwind's WebAssembly engine is installed once into
+      `scripts/tailwind-wasm/` (kept out of the project's dependencies: npm
+      refuses a "wasm32 only" package there) in the matching version.
+- [x] The stylesheet is then built with that engine: the plugin reads the
+      source files itself — the WebAssembly engine cannot walk a Windows
+      folder — and Tailwind's own compiler builds the CSS. Where the native
+      engine loads, the official plugin is used unchanged.
+
+Where to look: `scripts/tailwind-engine.cjs`, `scripts/ensure-tailwind-engine.cjs`,
+`scripts/tailwind-postcss.cjs`, `postcss.config.mjs`, `package.json`
+(`predev`, `prebuild`).
+
+Where to look: `packages/core/src/operations/plan.ts` (`completeElapsed`,
+`clearPlan`), `google/writes.ts` (`clearFrom`), `store/blocks.ts`
+(`openSegments`, `setSegmentsDone`), `planner.ts` (`leftBehind`),
+`drizzle/0014_segment_kept_open.sql` · `app/actions/plan.ts`,
+`app/calendar/page.tsx`, `lib/sync/service.ts` ·
+`components/plan-calendar-bar.tsx`, `components/calendar/event-panel.tsx` ·
+`lib/completion.test.ts`.
 
 ---
 

@@ -12,7 +12,14 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Tailwind's WebAssembly engine, installed on demand (third-party code).
+    "scripts/tailwind-wasm/**",
   ]),
+  // The Tailwind PostCSS plugin and its helpers are CommonJS: the bundler loads plugins with require().
+  {
+    files: ["scripts/**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ]);
 
 export default eslintConfig;

@@ -1,13 +1,14 @@
 import { DateTime } from 'luxon';
 import type { Env } from '../env';
 import { fitSegments, MIN_BLOCK_MIN } from '../blocks';
-import { commitDay, deleteBlockEverywhere, moveEvent, retimeEvent, syncBlockColors } from '../google/writes';
+import { clearFrom, commitDay, deleteBlockEverywhere, moveEvent, retimeEvent, syncBlockColors, type ClearResult } from '../google/writes';
+import { remainingMinutes } from '../hierarchy';
 import { rescheduleMissed, today } from '../planner';
 import * as blockStore from '../store/blocks';
 import { recordSlips } from '../store/reschedules';
 import { completeRitual } from '../store/rituals';
 import { getSettings } from '../store/settings';
-import { syncCompletion } from '../store/tasks';
+import { listAllTasks, syncCompletion } from '../store/tasks';
 
 /**
  * What the day planner and the calendar do with blocks — the same on the
@@ -24,6 +25,59 @@ export async function tick(env: Env, segmentIds: number[], done: boolean): Promi
 /** Ticks every segment of a block. */
 export async function completeBlock(env: Env, blockId: number): Promise<void> {
   await tick(env, await blockStore.segmentIdsOfBlock(env.db, blockId), true);
+}
+
+/**
+ * Work is done when its time has passed: every committed block that has ended
+ * has its unticked work ticked off, dated to the block's end. Returns how many
+ * segments that was. Cheap, and safe to call as often as anything reads the
+ * plan — a second call finds nothing left to do.
+ *
+ * Two things stay open:
+ * - work unticked by hand ("that did not happen") — until it is ticked again
+ *   or moved by "Didn't get to it";
+ * - work that slipped and was planned again: when a task has more unticked
+ *   minutes planned than it has left to do, its latest blocks are the plan and
+ *   the earlier ones are what slipped. Ticking those would count it twice.
+ *
+ * Drafts are a proposal, not an appointment, so they never complete by themselves.
+ */
+export async function completeElapsed(env: Env, now: Date = new Date()): Promise<number> {
+  const open = (await blockStore.openSegments(env.db)).filter((s) => !s.keptOpen);
+  const ended = (s: blockStore.OpenSegment) => s.state === 'synced' && Date.parse(s.endsAt) <= now.getTime();
+  if (!open.some(ended)) return 0;
+
+  const ticked = await blockStore.tickedMinutesByTask(env.db);
+  const tasks = new Map((await listAllTasks(env.db)).map((t) => [t.id, t]));
+  const left = new Map<number, number>();
+  const done: { id: number; at: string }[] = [];
+  const taskIds = new Set<number>();
+  // Latest block first: a task's remaining minutes go to the blocks it was last planned in.
+  for (const s of [...open].reverse()) {
+    const task = tasks.get(s.taskId);
+    if (!task) continue;
+    const budget = left.get(s.taskId) ?? remainingMinutes(task, ticked.get(s.taskId) ?? 0);
+    if (s.minutes > budget) continue;
+    left.set(s.taskId, budget - s.minutes);
+    if (!ended(s)) continue;
+    done.push({ id: s.id, at: s.endsAt });
+    taskIds.add(s.taskId);
+  }
+  if (done.length === 0) return 0;
+
+  await blockStore.completeSegmentsAt(env.db, done);
+  await syncCompletion(env.db, [...taskIds], await blockStore.tickedMinutesByTask(env.db));
+  return done.length;
+}
+
+/**
+ * "Clear plan": everything planned from today on comes off the calendar and
+ * out of Google — see `clearFrom`. What has already happened today is settled
+ * first, so finished work is kept rather than cleared.
+ */
+export async function clearPlan(env: Env): Promise<ClearResult> {
+  await completeElapsed(env);
+  return clearFrom(env, today(await getSettings(env.db)));
 }
 
 /**

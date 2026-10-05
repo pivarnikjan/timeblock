@@ -51,3 +51,6 @@ credentials.json
 
 # scratch files (screenshots, generated plans) - never commit
 /temp/
+
+# Tailwind WebAssembly engine, installed on demand (scripts/ensure-tailwind-engine.cjs)
+/scripts/tailwind-wasm/

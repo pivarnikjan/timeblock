@@ -17,12 +17,26 @@ export interface DraftOverview {
   last: string | null;
 }
 
+/** What "Clear plan" would take off: blocks from today on with work not ticked off, and how many are in Google. */
+export interface PlanOverview {
+  blocks: number;
+  committed: number;
+}
+
 /**
  * "Plan calendar": one click lays every task into its window, day after day
  * from today, until all of it has a place. The result is drafts on the grid —
  * drag any of them to adjust — and nothing reaches Google until "Commit".
  */
-export function PlanCalendarBar({ drafts, googleConnected }: { drafts: DraftOverview; googleConnected: boolean }) {
+export function PlanCalendarBar({
+  drafts,
+  planned,
+  googleConnected,
+}: {
+  drafts: DraftOverview;
+  planned: PlanOverview;
+  googleConnected: boolean;
+}) {
   const [state, action, pending] = useActionState<PlanCalendarState, FormData>(planCalendarAction, { kind: 'idle' });
 
   const confirmCommit = (e: MouseEvent<HTMLButtonElement>) => {
@@ -32,6 +46,14 @@ export function PlanCalendarBar({ drafts, googleConnected }: { drafts: DraftOver
   };
   const confirmDiscard = (e: MouseEvent<HTMLButtonElement>) => {
     if (!window.confirm(`Throw away ${plural(drafts.blocks, 'draft block')}, including any you moved by hand?`)) e.preventDefault();
+  };
+
+  const confirmClear = (e: MouseEvent<HTMLButtonElement>) => {
+    const inGoogle = planned.committed > 0 ? ` ${plural(planned.committed, 'event')} will be deleted from Google Calendar.` : '';
+    const message =
+      `Clear the plan? ${plural(planned.blocks, 'block')} from today on ${planned.blocks === 1 ? 'is' : 'are'} taken off the calendar — drafts, committed blocks and the ones you placed by hand.${inGoogle}\n\n` +
+      'Work already ticked off stays. Your tasks are not touched: change their priorities, then Plan calendar lays them out again.';
+    if (!window.confirm(message)) e.preventDefault();
   };
 
   return (
@@ -49,6 +71,23 @@ export function PlanCalendarBar({ drafts, googleConnected }: { drafts: DraftOver
         >
           Reschedule…
         </Button>
+        {planned.blocks > 0 && (
+          <Button
+            tone="ghost"
+            type="submit"
+            name="intent"
+            value="clear"
+            disabled={pending || (planned.committed > 0 && !googleConnected)}
+            onClick={confirmClear}
+            title={
+              planned.committed > 0 && !googleConnected
+                ? 'Connect Google Calendar in Settings first — some of these blocks have events there'
+                : 'Take everything planned from today on off the calendar (and out of Google), to plan afresh after priorities changed'
+            }
+          >
+            Clear plan…
+          </Button>
+        )}
         {drafts.blocks > 0 && (
           <>
             <Button
@@ -84,6 +123,14 @@ export function PlanCalendarBar({ drafts, googleConnected }: { drafts: DraftOver
       )}
       {state.kind === 'error' && <p className="text-sm text-red-500">Could not finish: {state.message}</p>}
       {state.kind === 'discarded' && <p className="text-sm text-muted">Discarded {plural(state.blocks, 'draft block')}.</p>}
+      {state.kind === 'cleared' && (
+        <p className="text-sm text-emerald-600">
+          Plan cleared: {plural(state.result.removed, 'block')} taken off
+          {state.result.events > 0 ? `, ${plural(state.result.events, 'event')} deleted from Google Calendar` : ''}
+          {state.result.kept > 0 ? `; ${plural(state.result.kept, 'block')} with ticked-off work kept as history` : ''}. Change
+          priorities (Tasks, or a CSV import), then <strong>Plan calendar</strong>.
+        </p>
+      )}
       {state.kind === 'committed' && (
         <p className="text-sm text-emerald-600">
           Committed: {plural(state.result.created, 'event')} created across {plural(state.result.days, 'day')}

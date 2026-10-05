@@ -130,6 +130,12 @@ export const blockSegments = sqliteTable(
     sortOrder: integer('sort_order').notNull().default(0),
     /** UTC ISO instant the segment was completed; null while open. */
     doneAt: text('done_at'),
+    /**
+     * Unticked by hand: the work did not happen, whatever the clock says. A
+     * committed block's work is otherwise ticked off by itself once its time
+     * has passed (see `completeElapsed`).
+     */
+    keptOpen: integer('kept_open', { mode: 'boolean' }).notNull().default(false),
   },
   (t) => [
     index('block_segments_block_idx').on(t.blockId),

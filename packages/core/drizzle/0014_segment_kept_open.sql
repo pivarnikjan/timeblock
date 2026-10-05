@@ -1,0 +1,1 @@
+ALTER TABLE `block_segments` ADD `kept_open` integer DEFAULT false NOT NULL;
