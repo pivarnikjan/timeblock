@@ -1,5 +1,6 @@
 import 'server-only';
 import { env, withEnv } from '@/lib/env';
+import * as planOps from '@timeblock/core/operations/plan';
 import * as planner from '@timeblock/core/planner';
 import type { BusySpan } from '@timeblock/core/scheduler/day';
 
@@ -34,6 +35,8 @@ export const previewReschedule = withEnv(planner.previewReschedule);
 /** "Reschedule", confirmed. */
 export const reschedule = withEnv(planner.reschedule);
 export const loadDay = withEnv(planner.loadDay);
+/** Ticks off the work of committed blocks whose time has passed. Cheap; called before anything reads the plan. */
+export const completeElapsed = withEnv(planOps.completeElapsed);
 
 /** Where everything is heading: each task's expected finish, and each horizon's outlook. */
 export function outlook(ctx: planner.PlanningContext, todaysBusy: BusySpan[] = []): Promise<planner.Outlook> {

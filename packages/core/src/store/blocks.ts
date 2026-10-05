@@ -182,12 +182,18 @@ export async function draftDatesFrom(db: TimeblockDb, from: string): Promise<{ d
   return rows.map((r) => ({ date: r.date, blocks: Number(r.count) }));
 }
 
-/** Puts a block somewhere new by hand. It is pinned from then on. */
+/** Work unticked by hand in a block's old place is no longer held open once the block has a new time. */
+async function releaseKeptOpen(db: TimeblockDb, blockId: number): Promise<void> {
+  await db.update(blockSegments).set({ keptOpen: false }).where(and(eq(blockSegments.blockId, blockId), eq(blockSegments.keptOpen, true)));
+}
+
+/** Puts a block somewhere new by hand. It is pinned from then on, and an appointment like any other again. */
 export async function moveBlock(db: TimeblockDb, id: number, date: string, startsAt: string, endsAt: string): Promise<void> {
   await db
     .update(blocks)
     .set({ date, startsAt, endsAt, pinned: true, updatedAt: new Date().toISOString() })
     .where(eq(blocks.id, id));
+  await releaseKeptOpen(db, id);
 }
 
 /** Takes segments out of their block — work that moved to a block of its own. */
@@ -213,6 +219,7 @@ export async function retimeBlock(
     .update(blocks)
     .set({ ...at, pinned: true, updatedAt: new Date().toISOString() })
     .where(eq(blocks.id, id));
+  await releaseKeptOpen(db, id);
 }
 
 /**
@@ -275,18 +282,55 @@ export async function deleteDrafts(db: TimeblockDb, date: string): Promise<void>
   await deleteBlocksAndSegments(db, rows.map((r) => r.id));
 }
 
-/** Ticks or unticks segments and returns the tasks they belong to. */
+/**
+ * Ticks or unticks segments by hand and returns the tasks they belong to. An
+ * unticked segment is kept open: it is not ticked off again by the clock.
+ */
 export async function setSegmentsDone(db: TimeblockDb, ids: number[], done: boolean): Promise<number[]> {
   if (ids.length === 0) return [];
   await db
     .update(blockSegments)
-    .set({ doneAt: done ? new Date().toISOString() : null })
+    .set({ doneAt: done ? new Date().toISOString() : null, keptOpen: !done })
     .where(inArray(blockSegments.id, ids));
   const rows = await db
     .select({ taskId: blockSegments.taskId })
     .from(blockSegments)
     .where(inArray(blockSegments.id, ids));
   return [...new Set(rows.map((r) => r.taskId))];
+}
+
+/** A segment not ticked off yet, with when its block is. */
+export interface OpenSegment {
+  id: number;
+  taskId: number;
+  minutes: number;
+  keptOpen: boolean;
+  state: Block['state'];
+  startsAt: string;
+  endsAt: string;
+}
+
+/** Every unticked segment of every planned block (drafts and committed), earliest block first. */
+export async function openSegments(db: TimeblockDb): Promise<OpenSegment[]> {
+  return db
+    .select({
+      id: blockSegments.id,
+      taskId: blockSegments.taskId,
+      minutes: blockSegments.minutes,
+      keptOpen: blockSegments.keptOpen,
+      state: blocks.state,
+      startsAt: blocks.startsAt,
+      endsAt: blocks.endsAt,
+    })
+    .from(blockSegments)
+    .innerJoin(blocks, eq(blockSegments.blockId, blocks.id))
+    .where(and(sql`${blockSegments.doneAt} is null`, inArray(blocks.state, ['draft', 'synced'])))
+    .orderBy(asc(blocks.startsAt));
+}
+
+/** Ticks segments off as done at the given instants (the end of their block) — by the clock, not by hand. */
+export async function completeSegmentsAt(db: TimeblockDb, done: { id: number; at: string }[]): Promise<void> {
+  for (const { id, at } of done) await db.update(blockSegments).set({ doneAt: at }).where(eq(blockSegments.id, id));
 }
 
 export async function segmentIdsOfBlock(db: TimeblockDb, blockId: number): Promise<number[]> {

@@ -17,6 +17,7 @@ import { nodeDriver } from '@/lib/db/driver';
 import { authorizedClient, connectionState } from '@/lib/google/client';
 import { withEnv } from '@/lib/env';
 import { syncCategoryColors } from '@timeblock/core/google/category-colors';
+import { completeElapsed } from '@timeblock/core/operations/plan';
 import { listCategories } from '@timeblock/core/store/categories';
 import { readCredentials } from '@/lib/google/credentials';
 
@@ -168,6 +169,8 @@ async function recolourQuietly(): Promise<void> {
 export function startAutoSync(): void {
   if (state.__timeblockAutoSync) return;
   const tick = async () => {
+    // Work whose time has passed is done — also when no page is open, so the phone hears of it.
+    await withEnv(completeElapsed)().catch((error) => console.error('[plan] could not tick off elapsed blocks:', error));
     await recolourQuietly();
     if (syncAvailability().status !== 'ready') return;
     const { clock, lastSyncAt } = readMeta(driver());
