@@ -12,6 +12,7 @@ import { MultiDayReviewList } from '@/components/calendar/multi-day-review';
 import { vacationConflicts } from '@/lib/calendar/vacation-conflicts';
 import { parseView } from '@timeblock/core/calendar/views';
 import { busySpans } from '@/lib/google/calendar';
+import { googleReadAt } from '@/lib/env';
 import { completeElapsed, loadDay } from '@/lib/planner';
 import * as blockRepo from '@/lib/repo/blocks';
 import { getVacation } from '@/lib/repo/vacations';
@@ -63,7 +64,7 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
 
   return (
     <div className="space-y-5">
-      <CalendarHeader data={data} />
+      <CalendarHeader data={data} googleReadAt={googleReadAt()?.toISOString() ?? null} />
       <PlanCalendarBar drafts={drafts} planned={planOverview} googleConnected={data.connection.status === 'connected'} />
       <MultiDayReviewList data={data} reviews={reviews} />
 

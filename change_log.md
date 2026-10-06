@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-10-06 | v0.18 | [E27 · A calendar that stays current](#e27--a-calendar-that-stays-current) | TB-102 – TB-104 | Done on the desktop |
 | 2026-10-05 | v0.17 | [E26 · Done by the clock, and a clean slate](#e26--done-by-the-clock-and-a-clean-slate) | TB-097 – TB-101 | Done on the desktop |
 | 2026-10-04 | v0.16 | [E25 · Missed work and the Dashboard](#e25--missed-work-and-the-dashboard) | TB-094 – TB-096 | Done on the desktop |
 | 2026-10-04 | v0.15 | [E24 · Plan once, edit in place](#e24--plan-once-edit-in-place) | TB-090 – TB-093 | Done on the desktop |
@@ -48,6 +49,59 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-10-06 · v0.18 — A calendar that stays current
+
+**Theme.** The Calendar can stay open all day: the time line keeps time, the
+contents refresh themselves, and Google is asked far less often.
+
+**Upgrade notes.** No migration. A change made in Google Calendar itself may
+take up to three minutes to appear (or press **↻ Refresh**); TimeBlock's own
+changes still show at once.
+
+## E27 · A calendar that stays current
+
+> The red line was an hour behind because I had not reloaded the page.
+
+### TB-102 · The time line follows the clock (fix)
+*As a planner, I want the red line to show the actual time without reloading.*
+
+Acceptance criteria
+- [x] The line is positioned in the browser from this computer's clock, every
+      30 seconds and whenever the tab is looked at again — no request involved.
+      It moves to the next day's column after midnight.
+
+### TB-103 · The calendar refreshes itself
+*As a planner, I want new meetings and ticked-off blocks to appear on an open
+calendar.*
+
+Acceptance criteria
+- [x] The Calendar draws itself again when the tab is returned to (3+ minutes
+      after the last refresh), every 10 minutes while in view, and when the day
+      changes; never while in the background.
+- [x] A refresh keeps unsaved changes and does not move the time grid: it only
+      scrolls to "now" when the view or date changes.
+- [x] **↻ Refresh** beside the view switcher reads Google again at once, and
+      shows when Google was last read.
+
+### TB-104 · Google Calendar reads are reused
+*As a planner, I want all this without sending many requests to Google.*
+
+Acceptance criteria
+- [x] The calendar list, pages of events and the calendar-exists check are
+      remembered for 3 minutes, across requests; concurrent identical reads
+      share one request. A failed read is not remembered; a single event is
+      always read fresh.
+- [x] Any write through TimeBlock forgets everything, so its own changes show
+      at once. Planning, committing, rescheduling and clearing read afresh;
+      so does a new sign-in or a disconnect.
+
+Where to look: `components/calendar/now-line.tsx`, `calendar-refresh.tsx`,
+`scroll-area.tsx` · `packages/core/src/google/cached-calendar.ts` (+ test) ·
+`lib/env.ts` (`GOOGLE_READS_FRESH_MS`, `forgetGoogleReads`) ·
+`app/actions/calendar.ts` (`refreshCalendarAction`), `app/actions/plan.ts`.
 
 ---
 

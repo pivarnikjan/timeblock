@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { grantsCalendar, oauthClient } from '@/lib/google/client';
+import { forgetGoogleReads } from '@/lib/env';
 import { clearCredentials, readCredentials, writeCredentials } from '@/lib/google/credentials';
 
 export const dynamic = 'force-dynamic';
@@ -58,6 +59,8 @@ export async function GET(request: Request) {
       // Nice-to-have only; the grant is valid regardless.
     }
 
+    // A new sign-in may be another account: nothing read before applies to it.
+    forgetGoogleReads();
     writeCredentials({
       refreshToken: tokens.refresh_token,
       account,

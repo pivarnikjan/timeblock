@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { forgetGoogleReads } from '@/lib/env';
 import { clearCredentials } from '@/lib/google/credentials';
 import { num, optNum, optStr, str } from '@/lib/forms';
 import { updateSettings } from '@/lib/repo/settings';
@@ -31,6 +32,7 @@ export async function setTargetCalendarAction(form: FormData): Promise<void> {
 /** Removes the local refresh token. The grant itself stays until revoked in Google. */
 export async function disconnectGoogleAction(): Promise<void> {
   clearCredentials();
+  forgetGoogleReads();
   revalidatePath('/', 'layout');
 }
 
