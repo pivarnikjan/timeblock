@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { num, str } from '@/lib/forms';
 import { redirect } from 'next/navigation';
-import { withEnv } from '@/lib/env';
+import { forgetGoogleReads, withEnv } from '@/lib/env';
 import { clearDay, commitFrom, type CommitRangeResult } from '@/lib/google/sync';
 import {
   generateDay,
@@ -30,6 +30,8 @@ function refresh() {
  * — and from what has happened since: blocks whose time has passed are done.
  */
 const pullFromPhone = async () => {
+  // Planning goes around the meetings Google has now, not the ones read a few minutes ago.
+  forgetGoogleReads();
   await syncQuietly(30_000);
   await withEnv(ops.completeElapsed)();
 };

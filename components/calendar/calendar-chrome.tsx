@@ -3,13 +3,14 @@ import { restoreEventsAction, toggleMultiDayOnlyAction, togglePlanAction, toggle
 import { energyColor } from '@timeblock/core/calendar/colors';
 import type { CalendarData } from '@/lib/calendar/load';
 import { VIEW_LABEL, VIEWS } from '@timeblock/core/calendar/views';
+import { CalendarRefresh } from './calendar-refresh';
 import { ToggleForm } from './toggle';
 import { VacationButton } from './vacation-button';
 
 const href = (view: string, date: string) => `/calendar?view=${view}&date=${date}`;
 
 /** Title, ‹ › arrows, jump-to-today, and the view switcher. */
-export function CalendarHeader({ data }: { data: CalendarData }) {
+export function CalendarHeader({ data, googleReadAt }: { data: CalendarData; googleReadAt: string | null }) {
   const { range, today } = data;
   const showsToday = range.days.includes(today) && (range.month === null || today.startsWith(range.month));
 
@@ -34,6 +35,10 @@ export function CalendarHeader({ data }: { data: CalendarData }) {
       )}
 
       <div className="ml-auto">
+        <CalendarRefresh zone={data.zone} today={today} googleReadAt={googleReadAt} connected={data.connection.status === 'connected'} />
+      </div>
+
+      <div>
         <VacationButton
           windows={data.windows}
           upcoming={data.upcomingVacations}

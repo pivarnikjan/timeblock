@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { VIEWS } from '@timeblock/core/calendar/views';
 import { enumOf, str } from '@/lib/forms';
-import { withEnv } from '@/lib/env';
+import { forgetGoogleReads, withEnv } from '@/lib/env';
 import { deleteGoogleEvent } from '@timeblock/core/operations/vacation';
 import { DateTime } from 'luxon';
 import { changeEventTime, type EventTimeScope } from '@timeblock/core/google/event-time';
@@ -19,6 +19,15 @@ const shown = (form: FormData) => form.get('on') === '1';
 
 function refresh() {
   revalidatePath('/calendar');
+}
+
+/**
+ * The Calendar's Refresh button: Google Calendar is read again now, rather than
+ * reusing what was read in the last few minutes — for a meeting just added there.
+ */
+export async function refreshCalendarAction(): Promise<void> {
+  forgetGoogleReads();
+  revalidatePath('/', 'layout');
 }
 
 /** Calendar checkbox in Settings → Calendar: unticked hides that calendar's events. */

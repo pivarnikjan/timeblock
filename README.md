@@ -94,6 +94,21 @@ Default view**. The hours shown default to **05:00 – 00:00** (in your Settings
 timezone, CET/CEST) and change in the same place. The time grid opens scrolled
 to an hour before now, like Google.
 
+**It stays current while it is open.** The red line at the current time follows
+this computer's clock by itself — never more than half a minute behind, with no
+reload and no request to anyone. The calendar's contents refresh themselves
+when you come back to the tab (if that is more than three minutes after the
+last refresh), every ten minutes while the tab is in view, and when the day
+changes — never in the background, and without moving the grid under you.
+
+Those refreshes are cheap on Google's side: what TimeBlock reads from Google
+Calendar is reused for **three minutes**, so moving between weeks, opening
+panels and refreshing within that time asks Google nothing. TimeBlock's own
+changes (a commit, a moved event, a cleared plan) always show at once, and
+planning always reads Google afresh. A meeting you add in Google itself shows
+within a few minutes — or straight away with **↻ Refresh** beside the view
+switcher, which also says when Google was last read.
+
 **Time windows are coloured bands.** Each window (Learning, Work…) is drawn in
 its own colour with a stripe down its left edge, and its name appears once per
 view — on the first day it opens — instead of on every day. The left panel's

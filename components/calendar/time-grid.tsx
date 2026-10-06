@@ -5,6 +5,7 @@ import { textOn } from '@timeblock/core/calendar/colors';
 import { layoutColumns, layoutLanes } from '@timeblock/core/calendar/layout';
 import { vacationPieces, type VacationPiece } from '@timeblock/core/calendar/vacation-overlay';
 import { EditableChip } from './editable-chip';
+import { NowLine } from './now-line';
 import { editTarget } from './edit-target';
 import { chipStyle, ItemLink, itemHref } from './event-chip';
 import { ScrollArea } from './scroll-area';
@@ -117,7 +118,7 @@ export function TimeGrid({ data }: { data: CalendarData }) {
       </div>
 
       {/* Time grid */}
-      <ScrollArea initialTop={initialTop} className="max-h-[75vh] overflow-y-auto">
+      <ScrollArea initialTop={initialTop} resetKey={`${data.range.view}|${data.range.anchor}`} className="max-h-[75vh] overflow-y-auto">
         <div className="grid" style={{ gridTemplateColumns: columns }}>
           <div className="relative" style={{ height }}>
             {hours.map((m) => (
@@ -180,8 +181,6 @@ function DayColumn({
       start: toMin(DateTime.max(item.start, visibleStart)),
       end: Math.max(toMin(DateTime.min(item.end, visibleEnd)), toMin(DateTime.max(item.start, visibleStart)) + 15),
     }));
-
-  const nowTop = day === data.today ? toMin(data.now) : null;
 
   return (
     <div className="relative border-l border-border" style={{ height }}>
@@ -254,13 +253,8 @@ function DayColumn({
         <VacationHatch key={piece.id} piece={piece} />
       ))}
 
-      {nowTop !== null && nowTop >= 0 && nowTop <= endMin - startMin && (
-        <div className="pointer-events-none absolute inset-x-0 z-10" style={{ top: nowTop * PX_PER_MIN }}>
-          <div className="relative h-0.5 bg-[#ea4335]">
-            <span className="absolute -left-1.5 -top-1 h-2.5 w-2.5 rounded-full bg-[#ea4335]" />
-          </div>
-        </div>
-      )}
+      {/* The current time: in every column, since it shows itself only on the day that is today — also after midnight */}
+      <NowLine day={day} zone={data.zone} initialNow={data.now.toISO()!} startMin={startMin} endMin={endMin} pxPerMin={PX_PER_MIN} />
     </div>
   );
 }
