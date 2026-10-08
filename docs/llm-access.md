@@ -19,64 +19,21 @@ Why it is built this way: [`decision_log.md`](../decision_log.md), ADR-001.
 
 ## Set it up
 
-TimeBlock must be running. Open **Settings → LLM access** and click **Show the
-token and the client configuration**.
+Step by step, for Claude desktop, Claude Code and Codex — with what to check
+when it does not work: [`llm-access-setup.md`](llm-access-setup.md).
 
-### Claude desktop
+In short, a client needs one of:
 
-1. In Claude: **Settings → Developer → Edit Config** (opens
-   `claude_desktop_config.json`).
-2. Paste the block from TimeBlock's Settings — it already holds the right path
-   and your token — or merge its `timeblock` entry into the `mcpServers` you
-   have:
-
-   ```json
-   {
-     "mcpServers": {
-       "timeblock": {
-         "command": "node",
-         "args": ["C:\\path\\to\\timeblock\\scripts\\timeblock-mcp.mjs"],
-         "env": { "TIMEBLOCK_API_TOKEN": "tb_…" }
-       }
-     }
-   }
-   ```
-
-3. Quit Claude completely and start it again. *timeblock* appears among its
-   tools.
-
-### Claude Code
-
-```powershell
-claude mcp add --transport http timeblock http://localhost:4321/api/mcp --header "Authorization: Bearer tb_…"
-```
-
-### OpenAI Codex CLI
-
-In `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.timeblock]
-command = "node"
-args = ["C:\\path\\to\\timeblock\\scripts\\timeblock-mcp.mjs"]
-env = { TIMEBLOCK_API_TOKEN = "tb_…" }
-```
-
-### Any other client
-
-- **It starts a local MCP server** (most desktop and local-model clients): the
-  command is `node <project>\scripts\timeblock-mcp.mjs`, with the environment
-  variable `TIMEBLOCK_API_TOKEN` (and `TIMEBLOCK_URL` if TimeBlock is not on
-  `http://localhost:4321`).
-- **It connects to an MCP URL**: `http://localhost:4321/api/mcp`, with the
+- **A local MCP server to start** (Claude desktop, Codex, most local-model
+  clients): `node <project>\scripts\timeblock-mcp.mjs`, with the environment
+  variable `TIMEBLOCK_API_TOKEN`. **Settings → LLM access** shows the block to
+  paste, path and token filled in.
+- **An MCP URL** (Claude Code): `http://localhost:4321/api/mcp`, with the
   header `Authorization: Bearer <token>`.
-- **It imports OpenAPI, or it is a script**: see *The HTTP API* below.
+- **OpenAPI, or it is a script**: see *The HTTP API* below.
 
-**The ChatGPT app cannot connect**: it only reaches servers on the internet,
-and TimeBlock deliberately is not one.
-
-Client menus and file locations change; if a step above no longer matches,
-the three facts under *Any other client* are what the client needs.
+ChatGPT in the browser cannot connect: it only reaches servers on the
+internet, and TimeBlock deliberately is not one.
 
 ## Using it
 

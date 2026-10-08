@@ -631,8 +631,9 @@ one line per change, and applies it when you agree.
 
 It speaks MCP (`http://localhost:4321/api/mcp`, or `scripts/timeblock-mcp.mjs`
 for clients that start a local server); the same commands are a plain HTTP API
-under `/api/v1/` for scripts. Setup per client, what it can and cannot do, and
-the API: [`docs/llm-access.md`](docs/llm-access.md).
+under `/api/v1/` for scripts. Step-by-step setup for Claude and Codex:
+[`docs/llm-access-setup.md`](docs/llm-access-setup.md). What it can and cannot
+do, and the API: [`docs/llm-access.md`](docs/llm-access.md).
 
 ## What it writes to Google
 

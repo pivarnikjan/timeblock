@@ -23,7 +23,7 @@ export function LlmAccessCard({ token, baseUrl, bridgePath, replaced }: { token:
       <p className="mt-1 text-xs text-muted">
         Let an LLM client — Claude, Codex, a local model — create and change calendar events and tasks from a prompt.
         It can only reach TimeBlock on this computer, only with the token below, and every change is shown to you
-        before it is made. Setup for each client: <code className={CODE}>docs/llm-access.md</code>.
+        before it is made. Step-by-step setup for Claude and Codex: <code className={CODE}>docs/llm-access-setup.md</code>.
       </p>
 
       <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
