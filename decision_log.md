@@ -308,5 +308,12 @@ How the decision was carried out, where it was left open. User guide:
   no-dependency reason. Revisit if schemas outgrow it.
 - **Confirmed: the server was listening on every network interface.** It now
   binds to `127.0.0.1` (`package.json`, `scripts/start-timeblock.ps1`).
+- **Correction to the *Known limit* above:** "the ChatGPT app does not" is too
+  broad. Per OpenAI's documentation (checked 2026-10-08), the Codex part of the
+  ChatGPT desktop app reads the same `config.toml` as the Codex CLI and can
+  start a local MCP server, so the Codex setup covers it. What cannot connect
+  is ChatGPT in the browser, which only reaches servers on the internet. The
+  decision is unchanged: remote access still needs a record of its own. Not
+  tried in the app itself.
 - **Not done:** moving the form-data server actions onto the registry; commands
   for goals, windows, categories, vacations, blocks and planning.
