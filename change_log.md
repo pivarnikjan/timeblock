@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-10-08 | v0.19 | [E28 · LLM access](#e28--llm-access) | TB-105 – TB-108 | Done on the desktop — event changes tested against a faked Google, not yet a live account |
 | 2026-10-06 | v0.18 | [E27 · A calendar that stays current](#e27--a-calendar-that-stays-current) | TB-102 – TB-104 | Done on the desktop |
 | 2026-10-05 | v0.17 | [E26 · Done by the clock, and a clean slate](#e26--done-by-the-clock-and-a-clean-slate) | TB-097 – TB-101 | Done on the desktop |
 | 2026-10-04 | v0.16 | [E25 · Missed work and the Dashboard](#e25--missed-work-and-the-dashboard) | TB-094 – TB-096 | Done on the desktop |
@@ -49,6 +50,82 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-10-08 · v0.19 — LLM access
+
+**Theme.** Events and tasks can be created and changed from a prompt in an LLM
+client, with every change shown before it is made — and without tying TimeBlock
+to one LLM vendor.
+
+**Upgrade notes.** No migration. Restart with `scripts\start-timeblock.ps1
+-Restart`. **The server now listens on `127.0.0.1` only** (it used to answer on
+every network interface): TimeBlock is no longer reachable from other machines
+on the network. A token is created in `%LOCALAPPDATA%\timeblock\api-token` the
+first time Settings or the API is opened. The decision behind the design:
+[`decision_log.md`](decision_log.md), ADR-001.
+
+## E28 · LLM access
+
+> It is easier to type the dates, times and names than to click them in.
+
+### TB-105 · Events and tasks from a prompt
+*As a planner, I want to tell an LLM client what to put in my calendar and my
+task list, so that a batch of changes takes one sentence.*
+
+Acceptance criteria
+- [x] A client can read: today's date and timezone with the calendars, windows
+      and categories; the events between two dates (TimeBlock's blocks and
+      vacations included, marked as not editable); tasks; goals.
+- [x] It can create, change and delete Google events — timed or all-day,
+      repeating if asked — in any writable calendar except TimeBlock's own, and
+      create, change and delete tasks.
+- [x] A repeating event changes for this occurrence, or (time only) this and
+      every following one; deleting removes one occurrence.
+- [x] It works with any client that speaks MCP — over a URL or by starting
+      `scripts/timeblock-mcp.mjs` — with no vendor's format in the code.
+
+### TB-106 · Nothing is changed unseen
+*As a planner, I want to see what a prompt will do before it does it.*
+
+Acceptance criteria
+- [x] `preview_changes` writes nothing: it returns one line per change — what,
+      which weekday and time, old → new, which calendar — and a change set id.
+- [x] If any change has a problem (read-only calendar, no such event, a date
+      that does not exist, an unknown goal), nothing is prepared and each
+      problem is listed.
+- [x] `apply_changes` carries a change set out once, within 15 minutes. If an
+      event or task in it changed after the preview, nothing is applied.
+- [x] A change that Google refuses while applying is reported with its reason;
+      the others are made.
+
+### TB-107 · Only this computer, only with the token
+*As a planner, I want nobody else — no web page, no other machine — to reach my
+calendar through this.*
+
+Acceptance criteria
+- [x] Every request needs the token from **Settings → LLM access**, which can
+      be replaced there.
+- [x] Requests from other sites' web pages, and requests addressed to anything
+      but `localhost` / `127.0.0.1`, are refused.
+- [x] The server listens on `127.0.0.1` only.
+
+### TB-108 · The same commands for scripts
+*As a tinkerer, I want to call TimeBlock from a script.*
+
+Acceptance criteria
+- [x] Every command is `POST /api/v1/<name>` with a JSON body;
+      `GET /api/v1/openapi.json` describes them all (OpenAPI 3.1).
+- [x] The HTTP API, its description and the MCP tools are made from one list of
+      commands, so they cannot drift apart.
+
+Where to look: **Settings → LLM access** · `docs/llm-access.md` ·
+`lib/commands/` (`registry.ts`, `reads.ts`, `changes.ts`, `schema.ts`,
+`openapi.ts`, `mcp.ts`, + `commands.test.ts`) · `app/api/v1/`, `app/api/mcp/` ·
+`lib/api/guard.ts`, `token.ts` · `scripts/timeblock-mcp.mjs` ·
+`packages/core/src/operations/events.ts` (`planNewEvent`, `createEvent`,
+`editEventDetails`).
 
 ---
 

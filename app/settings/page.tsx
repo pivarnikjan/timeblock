@@ -1,3 +1,4 @@
+import path from 'node:path';
 import Link from 'next/link';
 import {
   createWindowAction,
@@ -23,6 +24,8 @@ import { getSettings } from '@/lib/repo/settings';
 import { Button, Card, Field, Input, PageHeader } from '@/components/ui';
 import { PhoneSyncCard } from '@/components/phone-sync-card';
 import { CategoriesCard } from '@/components/categories-card';
+import { LlmAccessCard } from '@/components/llm-access-card';
+import { apiToken } from '@/lib/api/token';
 import { listCategories } from '@timeblock/core/store/categories';
 import { db } from '@/lib/db/client';
 import { syncStatus } from '@/lib/sync/service';
@@ -330,6 +333,13 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
       <CategoriesCard
         categories={categories.map((c) => ({ id: c.id, name: c.name, color: c.color, keywords: c.keywords }))}
         googleConnected={connection.status === 'connected'}
+      />
+
+      <LlmAccessCard
+        token={apiToken()}
+        baseUrl={new URL(redirectUri()).origin}
+        bridgePath={[process.cwd(), 'scripts', 'timeblock-mcp.mjs'].join(path.sep)}
+        replaced={params.token === 'replaced'}
       />
 
       <Card>

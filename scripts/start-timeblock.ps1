@@ -158,10 +158,12 @@ function Start-TimeBlock {
         }
 
         Write-Host "Starting TimeBlock on port $Port..."
+        # On 127.0.0.1 only: the app has no sign-in, so it must not be reachable from
+        # other machines on the network.
         # cmd does the redirecting. Start-Process's own -Redirect* switches make
         # the server inherit this script's output handles, so anything piping
         # the script's output would hang until the server exits.
-        $command = "/d /s /c `"`"$nextBin`" start --port $Port 1>`"$outLog`" 2>`"$errLog`"`""
+        $command = "/d /s /c `"`"$nextBin`" start --port $Port --hostname 127.0.0.1 1>`"$outLog`" 2>`"$errLog`"`""
         Start-Process -FilePath 'cmd.exe' `
             -ArgumentList $command `
             -WorkingDirectory $projectRoot `
