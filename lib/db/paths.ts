@@ -23,3 +23,8 @@ export function dbPath(): string {
 export function credentialsPath(): string {
   return path.join(dataDir(), 'credentials.json');
 }
+
+/** The token programs present to the local API (see lib/api/token.ts). */
+export function apiTokenPath(): string {
+  return path.join(dataDir(), 'api-token');
+}

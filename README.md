@@ -9,7 +9,8 @@ Everything runs on your machine. The only network calls are to Google Calendar
 — and, if you use the phone app, to TimeBlock's own hidden folder in your
 Google Drive, through which the two sync ([Phone sync](#phone-sync)).
 
-What changed and when: see [`change_log.md`](change_log.md).
+What changed and when: see [`change_log.md`](change_log.md). Why it is built
+the way it is: see [`decision_log.md`](decision_log.md).
 
 ## How the levels connect
 
@@ -547,7 +548,9 @@ secret in `.env.local`, restart, click **Connect Google** in Settings.
 npm run dev
 ```
 
-Then open <http://localhost:4321/calendar>.
+Then open <http://localhost:4321/calendar>. The server listens on `127.0.0.1`
+only — TimeBlock has no sign-in, so it is not offered to other machines on the
+network.
 
 ### Start it automatically at logon
 
@@ -617,6 +620,21 @@ had not seen. Drafts stay on the device that planned them until committed.
 Setup (enable the Drive API, reconnect with the Drive box ticked) and the
 details: [`docs/phone-sync.md`](docs/phone-sync.md).
 
+## LLM access
+
+An LLM client — Claude, Codex, a local model — can read the calendar and the
+tasks and create, change and delete events and tasks from a prompt ("lunch with
+Peter on Thursday 12–13, and move Friday's review to 15:00"). It reaches
+TimeBlock on this computer only, with a token from **Settings → LLM access**,
+and **every change is previewed first**: the client shows what would happen,
+one line per change, and applies it when you agree.
+
+It speaks MCP (`http://localhost:4321/api/mcp`, or `scripts/timeblock-mcp.mjs`
+for clients that start a local server); the same commands are a plain HTTP API
+under `/api/v1/` for scripts. Step-by-step setup for Claude and Codex:
+[`docs/llm-access-setup.md`](docs/llm-access-setup.md). What it can and cannot
+do, and the API: [`docs/llm-access.md`](docs/llm-access.md).
+
 ## What it writes to Google
 
 On its own, only to a secondary calendar it creates itself, **TimeBlock —
@@ -633,9 +651,10 @@ Focus**:
 
 Only events carrying one of those properties are ever updated or deleted
 automatically, and you can hide all of them with one checkbox in Google
-Calendar. Your other events are changed only when you delete one yourself —
-from the event panel or a vacation's *Scheduled during this vacation* list —
-always after a confirmation.
+Calendar. Your other events are changed only when you change or delete one yourself —
+in the event panel, a vacation's *Scheduled during this vacation* list, or
+through an LLM client ([LLM access](#llm-access)) — always after a confirmation
+or a preview.
 
 ## Where your data lives
 
@@ -643,6 +662,7 @@ always after a confirmation.
 | --- | --- |
 | Database | `%LOCALAPPDATA%\timeblock\timeblock.db` |
 | Google refresh token | `%LOCALAPPDATA%\timeblock\credentials.json` |
+| Token for LLM clients and scripts | `%LOCALAPPDATA%\timeblock\api-token` |
 | Sync file for the phone | Google Drive's hidden app data folder (see [Phone sync](#phone-sync)) |
 
 Both sit outside the repo, so cloning or copying the project never carries your
@@ -706,6 +726,7 @@ guards that, since it also runs on the phone.
 | Phone sync | `packages/core/src/sync/`, `lib/sync/service.ts` |
 | CSV parsing and import | `lib/csv/`, `lib/import/` |
 | Google Calendar | `packages/core/src/google/` — `calendar-api.ts` (the REST client), `reads.ts`, `writes.ts` (commits, colours, vacation copies) |
+| LLM access: commands, HTTP API, MCP | `lib/commands/` (the registry everything is made from), `app/api/v1/`, `app/api/mcp/`, `lib/api/` (token, who may call), `scripts/timeblock-mcp.mjs` |
 | Desktop bindings | `lib/env.ts` builds core's `Env` (database + Google grant); `lib/repo/*`, `lib/planner.ts`, `lib/google/*` bind core to it |
 
 ### Stack
