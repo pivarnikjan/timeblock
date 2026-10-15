@@ -3,7 +3,7 @@ import type { Env, GoogleStatus, TimeblockDb } from '@timeblock/core/env';
 import { cachedCalendar, forgetCalendarReads, newCalendarReadCache, type CalendarReadCache } from '@timeblock/core/google/cached-calendar';
 import { googleCalendar, type CalendarApi } from '@timeblock/core/google/calendar-api';
 import { db } from '@/lib/db/client';
-import { authorizedClient, connectionState } from '@/lib/google/client';
+import { accessToken, authorizedClient, connectionState } from '@/lib/google/client';
 
 /** The desktop's Google status in core's terms: not configured counts as not connected. */
 export function googleStatus(): GoogleStatus {
@@ -16,9 +16,7 @@ function calendarApi(): CalendarApi {
   let client = authorizedClient();
   return googleCalendar(async (renew) => {
     if (renew) client = authorizedClient();
-    const { token } = await client.getAccessToken();
-    if (!token) throw new Error('Google did not hand out an access token — reconnect in Settings.');
-    return token;
+    return accessToken(client);
   });
 }
 

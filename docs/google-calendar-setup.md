@@ -67,6 +67,14 @@ creates is tagged, and only tagged events are ever changed or deleted.
 
    then **Update** and **Save**. (TimeBlock asks for these at connect time
    anyway; listing them here makes the consent screen match.)
+8. **Publish the app:** **Audience → Publish app → Confirm**. The publishing
+   status changes from *Testing* to *In production*. **Do not skip this:**
+   while the app is in Testing, Google ends every sign-in 7 days after it was
+   given — on the desktop and the phone — and the Calendar then says *Google
+   ended TimeBlock's sign-in after 7 days*. Publishing does not list the app
+   anywhere or open it to anyone: it is still your private client. Google does
+   not verify it, so the consent screen keeps saying *Google hasn't verified
+   this app* (step 6.3) — that is all it means for a single-user app.
 
 ## Step 4 — Create the OAuth client
 
@@ -111,7 +119,8 @@ creates is tagged, and only tagged events are ever changed or deleted.
    **Connect Google**.
 2. Click it and choose your account.
 3. Google shows **"Google hasn't verified this app"** — expected for a private
-   app in Testing. Click **Continue** (you are the developer and the only user).
+   app, in Testing or published. Click **Continue** (or **Advanced → Go to
+   TimeBlock**; you are the developer and the only user).
 4. **Tick the calendar checkbox.** Google lists what TimeBlock asks for as
    separate checkboxes, and calendar access is **not** pre-ticked. Tick
    *"See, edit, share, and permanently delete all the calendars you can access
@@ -155,7 +164,8 @@ outside the project, so it can never end up in git or a copied folder.
 | "Google hasn't verified this app" | Normal for a private app in Testing. | Click **Continue**. |
 | Settings says *Add GOOGLE_CLIENT_ID…* | `.env.local` missing, misspelt, or the app was not restarted. | Step 5, then restart. |
 | *Google did not return a refresh token* | Google remembered an earlier grant and skipped consent. | Remove TimeBlock at <https://myaccount.google.com/permissions>, then **Reconnect**. |
-| Works for a week, then *Could not read the calendar: invalid_grant* | While the app is in **Testing**, Google expires refresh tokens after 7 days. | **Reconnect** in Settings. To stop the weekly expiry: **Audience → Publish app**. For a private single-user app with no public listing Google does not require verification to keep working; you will still see the "unverified" warning when connecting. |
+| Works for a week, then *Google ended TimeBlock's sign-in after 7 days* (before v0.19.1: *Could not read the calendar: invalid_grant*) | While the app is in **Testing**, Google ends every sign-in 7 days after it was given. | 1. **Audience → Publish app** (step 3.8). 2. **Settings → Reconnect** — the old sign-in cannot be revived, and only one given *after* publishing lasts. 3. On the phone, sign in again too. Until a sign-in has outlived 7 days, Settings and the Calendar remind you when the current one would end. |
+| *Google stopped accepting TimeBlock's sign-in … access was removed* | The sign-in ended before 7 days: TimeBlock was removed at <https://myaccount.google.com/permissions>, the password changed, or Google revoked it. | **Settings → Reconnect**. |
 | *Google Calendar API has not been used in project…* | The API is not enabled in this project. | Step 2 — make sure the right project is selected. |
 
 ## Disconnecting

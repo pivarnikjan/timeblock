@@ -13,6 +13,7 @@ import { vacationConflicts } from '@/lib/calendar/vacation-conflicts';
 import { parseView } from '@timeblock/core/calendar/views';
 import { busySpans } from '@/lib/google/calendar';
 import { googleReadAt } from '@/lib/env';
+import { AUDIENCE_URL, expiredExplanation } from '@/lib/google/grant';
 import { completeElapsed, loadDay } from '@/lib/planner';
 import * as blockRepo from '@/lib/repo/blocks';
 import { getVacation } from '@/lib/repo/vacations';
@@ -78,7 +79,24 @@ export default async function CalendarPage({ searchParams }: PageProps<'/calenda
           .
         </p>
       )}
-      {data.problem && (
+      {data.connection.status === 'expired' && (
+        <p className="rounded-md border border-red-500/40 bg-red-500/5 px-4 py-3 text-sm text-red-500">
+          {expiredExplanation(data.connection)} Until then you see TimeBlock&apos;s plan only.{' '}
+          <Link href="/settings" className="underline">
+            Reconnect in Settings
+          </Link>
+          .
+        </p>
+      )}
+      {data.expiryWarning && (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm">
+          {data.expiryWarning}{' '}
+          <a className="underline" href={AUDIENCE_URL} target="_blank" rel="noreferrer">
+            Open Google Auth platform → Audience
+          </a>
+        </p>
+      )}
+      {data.problem && data.connection.status !== 'expired' && (
         <p className="rounded-md border border-red-500/40 bg-red-500/5 px-4 py-3 text-sm text-red-500">
           Could not read the calendar: {data.problem}
         </p>

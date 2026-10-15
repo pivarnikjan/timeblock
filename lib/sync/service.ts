@@ -14,7 +14,7 @@ import {
 import { readMeta, retentionCutoff, type SyncMetaRow } from '@timeblock/core/sync/state';
 import { db, sqlite } from '@/lib/db/client';
 import { nodeDriver } from '@/lib/db/driver';
-import { authorizedClient, connectionState } from '@/lib/google/client';
+import { accessToken as grantToken, authorizedClient, connectionState } from '@/lib/google/client';
 import { withEnv } from '@/lib/env';
 import { syncCategoryColors } from '@timeblock/core/google/category-colors';
 import { completeElapsed } from '@timeblock/core/operations/plan';
@@ -48,11 +48,7 @@ export const MISSING_DRIVE_HELP =
 
 const driver = () => nodeDriver(sqlite());
 
-async function accessToken(): Promise<string> {
-  const { token } = await authorizedClient().getAccessToken();
-  if (!token) throw new Error('Google did not hand out an access token — reconnect in Settings.');
-  return token;
-}
+const accessToken = (): Promise<string> => grantToken(authorizedClient());
 
 /** A sentence for Settings about why a sync failed. */
 function describe(error: unknown): string {

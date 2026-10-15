@@ -13,6 +13,16 @@ export interface StoredCredentials {
   /** Scopes Google actually granted — not necessarily all that were asked for. */
   scopes?: string[];
   savedAt: string;
+  /**
+   * When Google stopped accepting this grant (`invalid_grant`): it expired or
+   * was revoked. Kept rather than the file deleted, so Settings can say when
+   * and why; Reconnect replaces the whole record.
+   */
+  expiredAt?: string;
+  /** When the grant ends, if Google said so when handing it out. */
+  expiresAt?: string;
+  /** The grant this one replaced, if that one had expired: how long it lasted tells why. */
+  previous?: { savedAt: string; expiredAt: string };
 }
 
 export interface OAuthApp {

@@ -16,6 +16,7 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 
 | Date | Release | Epic | Stories | Status |
 | --- | --- | --- | --- | --- |
+| 2026-10-15 | v0.19.1 | [E10 · Google Calendar setup guide](#e10--google-calendar-setup-guide) | TB-109 (fix) | Done on the desktop |
 | 2026-10-08 | v0.19 | [E28 · LLM access](#e28--llm-access) | TB-105 – TB-108 | Done on the desktop — event changes tested against a faked Google, not yet a live account |
 | 2026-10-06 | v0.18 | [E27 · A calendar that stays current](#e27--a-calendar-that-stays-current) | TB-102 – TB-104 | Done on the desktop |
 | 2026-10-05 | v0.17 | [E26 · Done by the clock, and a clean slate](#e26--done-by-the-clock-and-a-clean-slate) | TB-097 – TB-101 | Done on the desktop |
@@ -50,6 +51,45 @@ Newest release first. Story IDs (`TB-###`) never change once published.
 | 2026-08-12 | v0.1 | [E3 · Daily scheduler](#e3--daily-scheduler) | TB-006 – TB-008 | Done |
 | 2026-08-12 | v0.1 | [E4 · Google Calendar sync](#e4--google-calendar-sync) | TB-009 – TB-011 | Done — not yet tried against a live account |
 | 2026-08-12 | v0.1 | [E5 · Daily ritual and autostart](#e5--daily-ritual-and-autostart) | TB-012 – TB-013 | Done |
+
+---
+
+# 2026-10-15 · v0.19.1 — A sign-in that says why it ended
+
+**Theme.** When Google stops accepting TimeBlock's sign-in, every screen says
+so, why, and how to stop it happening again — instead of a bare
+`invalid_grant`.
+
+**Upgrade notes.** No migration. `credentials.json` gains optional fields
+(`expiredAt`, `expiresAt`, `previous`); older files read as before.
+
+## E10 · Google Calendar setup guide
+
+### TB-109 · The 7-day sign-in, explained and prevented (fix)
+*As a planner, I want to know why the calendar stopped working after a week,
+and to make it stop.*
+
+> Could not read the calendar: invalid_grant — after some time, again.
+
+Acceptance criteria
+- [x] The first time Google refuses the sign-in (`invalid_grant`), TimeBlock
+      records when. Settings then shows *Google no longer accepts the sign-in*
+      instead of *Connected*, and the Calendar shows the reason once instead of
+      a read error; phone sync and planning wait for a Reconnect.
+- [x] A sign-in that ended 7 days or more after it was given is explained as
+      Google's limit for apps in Testing, with a link to **Google Auth platform
+      → Audience** and the steps: publish, then Reconnect. One that ended
+      sooner is explained as removed access.
+- [x] After a Reconnect that follows such an expiry, Settings and the Calendar
+      say when the new sign-in would end if the app is still in Testing — until
+      it outlives 7 days. If Google states the grant's lifetime when handing it
+      out, that date is used instead.
+- [x] The setup guide makes publishing the app a step of its own (3.8).
+
+Where to look: `lib/google/grant.ts` (+ test) · `lib/google/client.ts`
+(`accessToken`, the `expired` state) · `app/api/google/callback/route.ts` ·
+`app/settings/page.tsx`, `app/calendar/page.tsx` ·
+`docs/google-calendar-setup.md`.
 
 ---
 
