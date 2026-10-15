@@ -2,6 +2,7 @@ import 'server-only';
 import { google } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
 import { oauthApp, readCredentials, redirectUri, writeCredentials } from './credentials';
+import { expiredExplanation, isInvalidGrant } from './grant';
 import { grantsCalendar, SCOPES } from '@timeblock/core/google/scopes';
 
 export { CALENDAR_SCOPE, SCOPES, grantsCalendar, isMissingScopeError, MISSING_SCOPE_HELP } from '@timeblock/core/google/scopes';
@@ -39,7 +40,7 @@ export function consentUrl(): string {
 /** An OAuth client already loaded with the stored refresh token. */
 export function authorizedClient(): OAuth2Client {
   const stored = readCredentials();
-  if (!stored) throw new NotConnectedError();
+  if (!stored || stored.expiredAt) throw new NotConnectedError();
 
   const client = oauthClient();
   client.setCredentials({ refresh_token: stored.refreshToken });
@@ -55,17 +56,50 @@ export function authorizedClient(): OAuth2Client {
   return client;
 }
 
+/**
+ * An access token from the stored grant. When Google refuses the grant
+ * (`invalid_grant`: it expired or was revoked) that is remembered, so every
+ * screen says "sign-in expired — Reconnect" rather than each read failing on
+ * its own, and the error says why.
+ */
+export async function accessToken(client: OAuth2Client): Promise<string> {
+  try {
+    const { token } = await client.getAccessToken();
+    if (!token) throw new Error('Google did not hand out an access token — reconnect in Settings.');
+    return token;
+  } catch (error) {
+    if (!isInvalidGrant(error)) throw error;
+    const ended = markGrantExpired();
+    throw new Error(ended ? expiredExplanation(ended) : 'Google no longer accepts the saved sign-in (invalid_grant). Reconnect in Settings.');
+  }
+}
+
+/** Records that Google stopped accepting the stored grant; returns it, or null when there is none. */
+function markGrantExpired(): { savedAt: string; expiredAt: string } | null {
+  const stored = readCredentials();
+  if (!stored) return null;
+  if (!stored.expiredAt) {
+    stored.expiredAt = new Date().toISOString();
+    writeCredentials(stored);
+    console.error(`[google] the sign-in from ${stored.savedAt} is no longer accepted (invalid_grant)`);
+  }
+  return { savedAt: stored.savedAt, expiredAt: stored.expiredAt };
+}
+
 export type ConnectionState =
   | { status: 'not-configured' }
   | { status: 'not-connected' }
   /** Signed in, but the calendar checkbox was left unticked on the consent screen. */
   | { status: 'missing-scope'; account?: string; savedAt: string }
+  /** Google stopped accepting the sign-in (it expired, or access was removed): Reconnect. */
+  | { status: 'expired'; account?: string; savedAt: string; expiredAt: string }
   | { status: 'connected'; account?: string; savedAt: string };
 
 export function connectionState(): ConnectionState {
   if (!oauthApp()) return { status: 'not-configured' };
   const stored = readCredentials();
   if (!stored) return { status: 'not-connected' };
+  if (stored.expiredAt) return { status: 'expired', account: stored.account, savedAt: stored.savedAt, expiredAt: stored.expiredAt };
   // Grants saved before scopes were recorded report "connected"; a missing
   // scope then surfaces on the first calendar read instead.
   if (stored.scopes && !grantsCalendar(stored.scopes)) {

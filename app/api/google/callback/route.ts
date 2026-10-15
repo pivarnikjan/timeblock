@@ -61,11 +61,18 @@ export async function GET(request: Request) {
 
     // A new sign-in may be another account: nothing read before applies to it.
     forgetGoogleReads();
+    const savedAt = new Date().toISOString();
+    // Google may say how long the grant lasts (it does for limited-time access).
+    const lifetime = Number((tokens as { refresh_token_expires_in?: unknown }).refresh_token_expires_in);
+    // How long the sign-in it replaces lasted tells whether the app is still in Testing.
+    const old = readCredentials();
     writeCredentials({
       refreshToken: tokens.refresh_token,
       account,
       scopes: (tokens.scope ?? '').split(/\s+/).filter(Boolean),
-      savedAt: new Date().toISOString(),
+      savedAt,
+      ...(lifetime > 0 ? { expiresAt: new Date(Date.parse(savedAt) + lifetime * 1000).toISOString() } : {}),
+      ...(old?.expiredAt ? { previous: { savedAt: old.savedAt, expiredAt: old.expiredAt } } : old?.previous ? { previous: old.previous } : {}),
     });
 
     return settings('connected=1');

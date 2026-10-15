@@ -19,7 +19,8 @@ import type { Settings, TimeWindow } from '@timeblock/core/db/schema';
 import { listWindows } from '@/lib/repo/windows';
 import { listCalendars, type CalendarSummary } from '@/lib/google/calendar';
 import { connectionState } from '@/lib/google/client';
-import { redirectUri } from '@/lib/google/credentials';
+import { readCredentials, redirectUri } from '@/lib/google/credentials';
+import { AUDIENCE_URL, endedLikeTesting, expiredExplanation, expiryWarning } from '@/lib/google/grant';
 import { getSettings } from '@/lib/repo/settings';
 import { Button, Card, Field, Input, PageHeader } from '@/components/ui';
 import { PhoneSyncCard } from '@/components/phone-sync-card';
@@ -80,6 +81,8 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
   const params = await searchParams;
   const [settings, windows, categories] = await Promise.all([getSettings(), listWindows(), listCategories(db())]);
   const connection = connectionState();
+  const stored = readCredentials();
+  const expiring = connection.status === 'connected' && stored ? expiryWarning(stored) : null;
   const calendars = connection.status === 'connected' ? await readCalendars(settings.targetCalendarId) : null;
   const colors = windowColors(windows);
 
@@ -181,6 +184,42 @@ export default async function SettingsPage({ searchParams }: PageProps<'/setting
               Reconnect
             </Link>
           </div>
+        )}
+
+        {connection.status === 'expired' && (
+          <div className="mt-3 space-y-3">
+            <p className="text-sm text-red-500">
+              Signed in{connection.account ? ` as ${connection.account}` : ''}, but Google no longer accepts the sign-in
+              (since {new Date(connection.expiredAt).toLocaleString()}). {expiredExplanation(connection)}
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              {endedLikeTesting(connection) && (
+                <a className="text-sm text-accent underline" href={AUDIENCE_URL} target="_blank" rel="noreferrer">
+                  Open Google Auth platform → Audience
+                </a>
+              )}
+              <Link
+                href="/api/google/auth"
+                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+              >
+                Reconnect
+              </Link>
+              <form action={disconnectGoogleAction}>
+                <Button tone="danger" type="submit">
+                  Disconnect
+                </Button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {expiring && (
+          <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
+            {expiring}{' '}
+            <a className="underline" href={AUDIENCE_URL} target="_blank" rel="noreferrer">
+              Open Google Auth platform → Audience
+            </a>
+          </p>
         )}
 
         {connection.status === 'connected' && (
